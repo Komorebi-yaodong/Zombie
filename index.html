@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zombie Siege AI Edition - Extreme Late Game Difficulty</title>
+    <style>
+        body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; margin: 0; padding-top: 10px; background-color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ecf0f1; overflow: hidden; }
+        #gameCanvas { border: 1px solid #7f8c8d; margin-bottom: 10px; }
+        .ui-container { display: flex; justify-content: space-between; align-items: flex-start; width: 800px; padding: 10px 0; font-size: 14px; margin-bottom: 5px; }
+        .stats-left, .stats-middle, .stats-right { background-color: rgba(44, 62, 80, 0.8); padding: 10px; border-radius: 5px; border: 1px solid #7f8c8d; }
+        .stats-left { min-width: 320px; flex-shrink: 0; }
+        .stats-middle { flex-grow: 1; text-align: left; margin: 0 10px;}
+        .stats-right { text-align: right; min-width: 160px; flex-shrink: 0; }
+        .stats-left p, .stats-middle p, .stats-right p { margin: 4px 0; }
+        .progress-bar-container { width: 150px; height: 10px; background-color: #7f8c8d; border-radius: 5px; overflow: hidden; margin-top: 3px; }
+        .progress-bar { height: 100%; background-color: #2ecc71; transition: width 0.2s ease-out; }
+        .xp-bar { background-color: #3498db; }
+        .stats-middle .stats-title { text-align: center; font-weight: bold; margin-bottom: 8px !important; }
+        .stats-middle .zombie-type-label { font-weight: bold; color: #e67e22; display: block; margin-top: 6px; margin-bottom: 2px;}
+        .stats-middle .stats-note { font-size: 0.8em; text-align: center; margin-top: 8px !important; color: #bdc3c7; }
+        .modal { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); background-color: rgba(52, 73, 94, 0.97); padding: 20px; border-radius: 10px; border: 2px solid #95a5a6; z-index: 1000; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.5); max-height: 80vh; overflow-y: auto; }
+        .modal h3 { margin-top: 0; color: #e67e22; }
+        .modal button.skill-option-btn, .modal button.close-btn { background-color: #2980b9; color: white; border: none; padding: 10px 15px; margin: 10px 5px; border-radius: 5px; cursor: pointer; font-size: 14px; transition: background-color 0.3s; }
+        .modal button.skill-option-btn:hover { background-color: #3498db; }
+        .modal button.close-btn { background-color: #c0392b; margin-top: 20px; }
+        .modal button.close-btn:hover { background-color: #e74c3c; }
+        #skillModal { width: 500px; }
+        #skillTimer { margin-top: 15px; font-size: 12px; color: #bdc3c7; }
+        #skillBookModal { width: 600px; text-align: left; }
+        #skillBookModal .skill-entry { background-color: rgba(44, 62, 80, 0.7); padding: 10px; margin-bottom: 8px; border-radius: 4px; border-left: 3px solid #7f8c8d; }
+        #skillBookModal .skill-entry.learned { border-left-color: #2ecc71; }
+        #skillBookModal .skill-entry h4 { margin: 0 0 5px 0; color: #ecf0f1; }
+        #skillBookModal .skill-entry p { margin: 0; font-size: 0.9em; color: #bdc3c7; }
+        #skillBookModal .skill-level { font-weight: bold; color: #f1c40f; }
+        #gameOverScreen, #startGamePrompt { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); background-color: rgba(44, 62, 80, 0.95); padding: 30px; border-radius: 10px; text-align: center; z-index: 1001; border: 1px solid #7f8c8d; }
+        #gameOverScreen h2, #startGamePrompt h2 { margin-top: 0; color: white; }
+        #gameOverScreen button, #startGamePrompt button { background-color: #2ecc71; color: white; border: none; padding: 10px 20px; margin: 10px 5px; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        #startGamePrompt button.new-game-btn { background-color: #3498db; }
+        .game-buttons button { background-color: #007bff; color: white; border: none; padding: 5px 10px; margin: 2px 5px; border-radius: 3px; cursor: pointer; min-width: 80px; }
+        #bossRewardModal { width: 400px; }
+        #bossRewardModal ul { list-style-type: none; padding: 0; }
+        #bossRewardModal li { background-color: rgba(44, 62, 80, 0.6); padding: 8px; margin: 5px 0; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="startGamePrompt">
+        <h2>游戏存档</h2>
+        <p>发现之前的游戏存档。</p>
+        <button onclick="continueGame()">继续游戏</button>
+        <button class="new-game-btn" onclick="startNewGame()">开始新游戏</button>
+    </div>
+
+    <div class="ui-container">
+        <div class="stats-left">
+            <p>生命值: <span id="playerHp">100</span> / <span id="playerMaxHp">100</span></p>
+            <div class="progress-bar-container"><div class="progress-bar" id="playerHpBar" style="width: 100%;"></div></div>
+            <p>经验值: <span id="playerXp">0</span> / <span id="xpToLevelUp">100</span> (等级 <span id="playerLevel">1</span>)</p>
+            <div class="progress-bar-container"><div class="progress-bar xp-bar" id="playerXpBar" style="width: 0%;"></div></div>
+            <p>主子弹: 伤害 <span id="bulletDamageDisplay">10.0</span> | 弹道 <span id="projectileCountDisplay">1</span> | 每道 <span id="bulletsPerShotDisplay">1</span> | 穿透 <span id="bulletPierceCountDisplay">0</span></p>
+            <p>史莱姆: 数量 <span id="slimeCountDisplay">0</span> | 伤害 <span id="slimeDamageDisplay">20.0</span> | 速度 <span id="slimeSpeedMultiplierDisplay">100%</span></p>
+            <p>能量波: <span id="hasEnergyWaveDisplay">否</span> | 伤害 <span id="energyWaveDamageDisplay">20</span> | CD <span id="energyWaveCooldownDisplay">30</span>s</p>
+            <p>每5秒生命回复: <span id="hpRegenPer5SecDisplay">0</span></p>
+            <p>经验获取倍率: <span id="xpGainMultiplierDisplay">100%</span></p>
+        </div>
+        <div class="stats-middle">
+            <p class="stats-title" id="middleStatsTitle">当前波数僵尸属性</p>
+            <div class="zombie-type-stats-container">
+                <span class="zombie-type-label">普通型:</span>
+                <p>生命 <span id="zombieNormalHp">N/A</span> | 伤害 <span id="zombieNormalDamage">N/A</span> | 速度 <span id="zombieNormalSpeed">N/A</span></p>
+            </div>
+            <div class="zombie-type-stats-container">
+                <span class="zombie-type-label">快速型:</span>
+                <p>生命 <span id="zombieFastHp">N/A</span> | 伤害 <span id="zombieFastDamage">N/A</span> | 速度 <span id="zombieFastSpeed">N/A</span></p>
+            </div>
+            <div class="zombie-type-stats-container">
+                <span class="zombie-type-label">坦克型:</span>
+                <p>生命 <span id="zombieTankHp">N/A</span> | 伤害 <span id="zombieTankDamage">N/A</span> | 速度 <span id="zombieTankSpeed">N/A</span></p>
+            </div>
+            <div id="bossStatsDisplay" style="display:none;">
+                 <p>生命: <span id="bossHpDisplay">N/A</span> / <span id="bossMaxHpDisplay">N/A</span></p>
+                 <p>速度: <span id="bossSpeedDisplay">N/A</span></p> 
+            </div>
+            <p class="stats-note" id="zombieStatsNote">(属性随波数提升)</p>
+        </div>
+        <div class="stats-right">
+            <p>波数: <span id="waveCount">1</span></p>
+            <p>分数: <span id="scoreCount">0</span></p>
+            <div class="game-buttons">
+                <button onclick="toggleSkillBook()">查看技能</button>
+                <button onclick="saveGame()">保存游戏</button>
+                <button id="toggleBgBtn" onclick="toggleAutoChangeBackground()">更换背景: 开</button>
+            </div>
+        </div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="skillModal" class="modal"><h3>选择一个技能！</h3><div id="skillOptions"></div><p id="skillTimer">剩余时间: 6s</p></div>
+    <div id="skillBookModal" class="modal"><h3>技能书</h3><div id="skillBookContent"></div><button class="close-btn" onclick="toggleSkillBook()">关闭</button></div>
+    <div id="gameOverScreen"><h2>游戏结束!</h2><p>最终波数: <span id="finalWave"></span></p><p>最终分数: <span id="finalScore"></span></p><button onclick="startNewGame(true)">重新开始</button></div>
+    <div id="bossRewardModal" class="modal">
+        <h3>Boss Defeated! Skills Acquired:</h3>
+        <div id="bossRewardSkillList"></div>
+        <p id="bossRewardTimer">Closing in: 6s</p>
+        <button class="close-btn" onclick="closeBossRewardModal()">关闭</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
+      
+        const playerHpDisplay = document.getElementById('playerHp'); const playerMaxHpDisplay = document.getElementById('playerMaxHp'); const playerHpBar = document.getElementById('playerHpBar');
+        const playerXpDisplay = document.getElementById('playerXp'); const xpToLevelUpDisplay = document.getElementById('xpToLevelUp'); const playerLevelDisplay = document.getElementById('playerLevel'); const playerXpBar = document.getElementById('playerXpBar');
+        const bulletDamageDisplay = document.getElementById('bulletDamageDisplay'); const projectileCountDisplay = document.getElementById('projectileCountDisplay'); const bulletsPerShotDisplay = document.getElementById('bulletsPerShotDisplay'); const bulletPierceCountDisplay = document.getElementById('bulletPierceCountDisplay');
+        const waveCountDisplay = document.getElementById('waveCount'); const scoreCountDisplay = document.getElementById('scoreCount');
+        const skillModal = document.getElementById('skillModal'); const skillOptionsContainer = document.getElementById('skillOptions'); const skillTimerDisplay = document.getElementById('skillTimer');
+        const skillBookModal = document.getElementById('skillBookModal'); const skillBookContent = document.getElementById('skillBookContent');
+        const gameOverScreen = document.getElementById('gameOverScreen'); const finalWaveDisplay = document.getElementById('finalWave'); const finalScoreDisplay = document.getElementById('finalScore');
+        const startGamePrompt = document.getElementById('startGamePrompt');
+        const hpRegenPer5SecDisplay = document.getElementById('hpRegenPer5SecDisplay'); const xpGainMultiplierDisplay = document.getElementById('xpGainMultiplierDisplay');
+        const slimeCountDisplay = document.getElementById('slimeCountDisplay'); const slimeDamageDisplay = document.getElementById('slimeDamageDisplay'); const slimeSpeedMultiplierDisplay = document.getElementById('slimeSpeedMultiplierDisplay');
+        const hasEnergyWaveDisplay = document.getElementById('hasEnergyWaveDisplay'); const energyWaveDamageDisplay = document.getElementById('energyWaveDamageDisplay'); const energyWaveCooldownDisplay = document.getElementById('energyWaveCooldownDisplay');
+
+        const zombieNormalHpDisplay = document.getElementById('zombieNormalHp'); const zombieNormalDamageDisplay = document.getElementById('zombieNormalDamage'); const zombieNormalSpeedDisplay = document.getElementById('zombieNormalSpeed');
+        const zombieFastHpDisplay = document.getElementById('zombieFastHp'); const zombieFastDamageDisplay = document.getElementById('zombieFastDamage'); const zombieFastSpeedDisplay = document.getElementById('zombieFastSpeed');
+        const zombieTankHpDisplay = document.getElementById('zombieTankHp'); const zombieTankDamageDisplay = document.getElementById('zombieTankDamage'); const zombieTankSpeedDisplay = document.getElementById('zombieTankSpeed');
+        
+        const middleStatsTitle = document.getElementById('middleStatsTitle');
+        const zombieTypeStatContainers = document.querySelectorAll('.zombie-type-stats-container');
+        const bossStatsDisplay = document.getElementById('bossStatsDisplay');
+        const bossHpDisplay = document.getElementById('bossHpDisplay');
+        const bossMaxHpDisplay = document.getElementById('bossMaxHpDisplay');
+        const bossSpeedDisplay = document.getElementById('bossSpeedDisplay');
+        const zombieStatsNote = document.getElementById('zombieStatsNote');
+
+        const bossRewardModal = document.getElementById('bossRewardModal');
+        const bossRewardSkillList = document.getElementById('bossRewardSkillList');
+        const bossRewardTimerDisplay = document.getElementById('bossRewardTimer');
+        const toggleBgBtn = document.getElementById('toggleBgBtn');
+
+
+        let player, zombies, bullets, energyWaves, currentBoss; let wave, score, gameRunning, skillSelectionActive, skillBookOpen, bossRewardModalActive;
+        let skillSelectionTimeoutId, skillSelectionCountdownIntervalId; let animationFrameId = null;
+        let bossRewardTimeoutId, bossRewardCountdownIntervalId;
+
+        let autoChangeBackground = true;
+        let nextBackgroundImage = null;
+        let oldBackgroundImage = null;
+        let crossfadeProgress = 1; 
+        const crossfadeDuration = 1000; 
+        let lastLoopTimestamp = 0;
+
+        let isFetchingNextBackground = false;
+        let currentBackgroundSeed = Math.floor(Math.random() * 1000000);
+        const REMOTE_BACKGROUND_BASE_URL = 'https://image.pollinations.ai/prompt/Gritty%202D%20isometric%20game%20art%2C%20top-down%20view%20of%20a%20desolate%2C%20ruined%20city%20street%2C%20abandoned%20cars%20scattered%20among%20rubble%20and%20cracked%20asphalt%2C%20muted%20color%20palette%2C%20strategic%20game%20map%20feel?width=1216&height=832&seed={SEED}&model=flux&enhance=true&nologo=true&safe=false';
+
+
+        const INITIAL_BULLET_DAMAGE = 10; const PLAYER_SHOOT_COOLDOWN = 800; const INTER_BULLET_DELAY = 80;
+        let lastShotTime = 0; let timeOfLastBurstBullet = 0;
+        
+        const XP_BASE_LEVEL_UP_UNTIL = 30; // Levels up to this use the array
+        const XP_PER_LEVEL = [0, 75, 175, 300, 450, 625, 825, 1050, 1300, 1575, 1875, 2200, 2550, 2925, 3325, 3750, 4200, 4675, 5175, 5700, 6250, 6825, 7425, 8050, 8700, 9375, 10075, 10800, 11550, 12325, 13125]; // XP for levels 1 to 30
+        const XP_POST_BASE_MULTIPLIER = 1.12; // Each level after XP_BASE_LEVEL_UP_UNTIL needs 12% more XP than the last
+        const XP_POST_BASE_FLAT_INCREASE = 500; // Also add a flat increase
+
+        const ZOMBIE_TYPES = { normal: { hp: 20, speed: 0.25, damage: 5, xp: 10, color: '#27ae60', size: 15 }, fast:   { hp: 15, speed: 0.5, damage: 3, xp: 15, color: '#f1c40f', size: 12 }, tank:   { hp: 50, speed: 0.15, damage: 10, xp: 30, color: '#c0392b', size: 20 }};
+        const BOSS_STATS = { 
+            id: "the_boss_id", 
+            hp: 1000, 
+            damage: 9999, 
+            xp: 500, 
+            color: '#8e44ad', 
+            size: 60, 
+            speed: 0.1, 
+            pathShrinkAmount: 50, 
+            initialPathDimensionFactor: 0.9 
+        };
+        
+        let nextUniqueId = 0; const MAX_SLIME_SPEED = 1.5;
+        const ALL_SKILLS = [
+            { id: 'hp_boost', name: '生命强化', description: '最大生命值增加50, 并回复50点生命', category: 'player', apply: (p) => { p.maxHp += 50; p.hp = Math.min(p.hp + 50, p.maxHp); } },
+            { id: 'life_heal_over_time', name: '生命治愈', description: '每5秒回复1点生命', category: 'player', apply: (p) => { p.hpRegenPer5Sec += 1; } },
+            { id: 'xp_gain_boost', name: '经验加速', description: '获取经验值增加20%', category: 'player', apply: (p) => { p.xpGainMultiplier += 0.20; } },
+            { id: 'damage_boost_flat', name: '主子弹强化 (固定)', description: '主子弹固定伤害增加5点', category: 'bullet', apply: (p) => { p.bulletFlatDamageBonus += 5; } },
+            { id: 'damage_boost_percent', name: '主子弹强化 (百分比)', description: '当前主子弹伤害增加60%', category: 'bullet', apply: (p) => { p.bulletDamageMultiplier += 0.6; } },
+            { id: 'projectile_increase', name: '弹道增加', description: '增加一个弹道，但主子弹伤害减少15%', category: 'bullet', apply: (p) => { p.projectileCount++; p.bulletDamageMultiplier -= 0.15; } },
+            { id: 'multishot', name: '子弹连发', description: '每个弹道，每次射击增加一个主子弹，但主子弹伤害减少15%', category: 'bullet', apply: (p) => { p.bulletsPerShot++; p.bulletDamageMultiplier -= 0.15; } },
+            { id: 'bullet_pierce', name: '子弹穿透', description: '主子弹可以穿透一个敌人', category: 'bullet', apply: (p) => { p.bulletPierceCount += 1; } },
+            { id: 'summon_slime', name: '召唤史莱姆', description: '召唤一个史莱姆，触碰到的僵尸将每秒受到20伤害', category: 'slime', maxStacks: 1, 
+                apply: function(p) { 
+                    let newSlimeX, newSlimeY; let attempts = 0; const MAX_ATTEMPTS = 20; const slimeSize = 10; let positionFound = false;
+                    while (attempts < MAX_ATTEMPTS && !positionFound) {
+                        const offsetX = Math.random() * 40 - 20; const offsetY = Math.random() * 40 - 20;
+                        newSlimeX = p.x + offsetX; newSlimeY = p.y + offsetY; positionFound = true;
+                        for (const existingSlime of p.slimes) {
+                            if (Math.hypot(newSlimeX - existingSlime.x, newSlimeY - existingSlime.y) < (slimeSize + existingSlime.size) / 2 + 3) { 
+                                positionFound = false; break;
+                            }
+                        } attempts++;
+                    }
+                    if (!positionFound) { newSlimeX = p.x; newSlimeY = p.y; } 
+                    p.slimes.push({ id: nextUniqueId++, x: newSlimeX, y: newSlimeY, size: slimeSize, color: 'rgba(50, 200, 50, 0.6)', speed: 0.4, targetEnemyId: null, targetIsBoss: false, lastDamageApplicationTimes: {} });
+                } 
+            },
+            { id: 'slime_surge', name: '史莱姆涌动', description: '新召唤一个史莱姆，但是史莱姆伤害减少20%', category: 'slime', prerequisite: 'summon_slime', 
+                apply: function(p) { 
+                    let newSlimeX, newSlimeY; let attempts = 0; const MAX_ATTEMPTS = 20; const slimeSize = 10; let positionFound = false;
+                     while (attempts < MAX_ATTEMPTS && !positionFound) {
+                        const offsetX = Math.random() * 40 - 20; const offsetY = Math.random() * 40 - 20;
+                        newSlimeX = p.x + offsetX; newSlimeY = p.y + offsetY; positionFound = true;
+                        for (const existingSlime of p.slimes) {
+                             if (Math.hypot(newSlimeX - existingSlime.x, newSlimeY - existingSlime.y) < (slimeSize + existingSlime.size) / 2 + 3) {
+                                positionFound = false; break;
+                            }
+                        } attempts++;
+                    }
+                    if (!positionFound) { newSlimeX = p.x; newSlimeY = p.y; }
+                    p.slimes.push({ id: nextUniqueId++, x: newSlimeX, y: newSlimeY, size: slimeSize, color: 'rgba(50, 200, 50, 0.6)', speed: 0.4, targetEnemyId: null, targetIsBoss: false, lastDamageApplicationTimes: {} });
+                    p.slimeDamagePercentMultiplier -= 0.20; 
+                }
+            },
+            { id: 'slime_devour', name: '史莱姆吞噬', description: '史莱姆伤害增加60%', category: 'slime', prerequisite: 'summon_slime', apply: (p) => { p.slimeDamagePercentMultiplier += 0.60; } },
+            { id: 'slime_accelerate', name: '史莱姆加速', description: '史莱姆移动速度增加25% (有上限)', category: 'slime', prerequisite: 'summon_slime', apply: (p) => { p.slimeSpeedMultiplier = Math.min(p.slimeSpeedMultiplier + 0.25, MAX_SLIME_SPEED / 0.4); } },
+            { id: 'energy_wave_aoe', name: '能量波动', description: '每30秒发射环形能量波，造成20伤害', category: 'energy_wave', maxStacks: 1, apply: (p) => { p.hasEnergyWave = true; } },
+            { id: 'energy_wave_damage_up', name: '能量增强', description: '增加60%能量波的伤害', category: 'energy_wave', prerequisite: 'energy_wave_aoe', apply: (p) => { p.energyWaveDamageMultiplier += 0.60; } },
+            { id: 'energy_wave_cooldown_down', name: '能量聚集', description: '减少能量波动的冷却1秒 (最低10秒)', category: 'energy_wave', prerequisite: 'energy_wave_aoe', apply: (p) => { p.energyWaveCooldown = Math.max(10000, p.energyWaveCooldown - 1000); } }
+        ];
+        const SKILL_CATEGORY_ORDER = ['player', 'bullet', 'slime', 'energy_wave'];
+
+        let localBackgroundImage = new Image(); 
+        let localBackgroundImageProcessed = false;
+        localBackgroundImage.onload = function() { 
+            localBackgroundImageProcessed = true; 
+            if (!backgroundImageProcessed) { 
+                backgroundImage = localBackgroundImage;
+                backgroundImageProcessed = true;
+            }
+            startGameManager(); 
+        };
+        localBackgroundImage.onerror = function() { 
+            localBackgroundImageProcessed = true; 
+            if (!backgroundImageProcessed) {
+                backgroundImageProcessed = true; 
+            }
+            startGameManager(); 
+        };
+        localBackgroundImage.src = './background.jpg'; 
+        
+        let backgroundImage = localBackgroundImage; 
+        let backgroundImageProcessed = false;
+
+
+        function fetchNextBackgroundImage() {
+            if (!autoChangeBackground || isFetchingNextBackground) {
+                return;
+            }
+            isFetchingNextBackground = true;
+            currentBackgroundSeed = Math.floor(Math.random() * 1000000);
+            const url = REMOTE_BACKGROUND_BASE_URL.replace('{SEED}', currentBackgroundSeed);
+
+            const img = new Image();
+            img.crossOrigin = "Anonymous"; 
+            img.onload = function() {
+                console.log("New background loaded successfully:", url);
+                nextBackgroundImage = img; 
+                isFetchingNextBackground = false;
+            };
+            img.onerror = function() {
+                console.error("Failed to load background image:", url);
+                isFetchingNextBackground = false;
+                setTimeout(fetchNextBackgroundImage, 3000); 
+            };
+            img.src = url;
+        }
+
+        function toggleAutoChangeBackground() {
+            autoChangeBackground = !autoChangeBackground;
+            toggleBgBtn.textContent = `更换背景: ${autoChangeBackground ? '开' : '关'}`;
+            localStorage.setItem('zombieSiegeAutoBg', JSON.stringify(autoChangeBackground)); 
+            if (autoChangeBackground && !nextBackgroundImage && !isFetchingNextBackground) {
+                fetchNextBackgroundImage(); 
+            }
+        }
+        
+        function startGameManager() { 
+            if (gameRunning && (localBackgroundImageProcessed || backgroundImageProcessed) && animationFrameId === null) { 
+                if(!backgroundImageProcessed && localBackgroundImageProcessed) { 
+                    backgroundImage = localBackgroundImage;
+                    backgroundImageProcessed = true;
+                }
+                lastLoopTimestamp = performance.now(); 
+                animationFrameId = requestAnimationFrame(gameLoop); 
+            }
+        }
+
+        function initializeNewGameVariables() {
+            player = { x: canvas.width / 2, y: canvas.height / 2, size: 20, color: '#3498db', hp: 100, maxHp: 100, xp: 0, level: 1, initialBulletDamage: INITIAL_BULLET_DAMAGE, bulletFlatDamageBonus: 0, bulletDamageMultiplier: 0, projectileCount: 1, bulletsPerShot: 1, shootCooldown: PLAYER_SHOOT_COOLDOWN, xpGainMultiplier: 1, learnedSkills: {}, currentBulletInBurst: 0, hpRegenPer5Sec: 0, lastHpRegenTime: 0, bulletPierceCount: 0, slimes: [], slimeBaseDamage: 20, slimeDamagePercentMultiplier: 0, slimeSpeedMultiplier: 1, hasEnergyWave: false, energyWaveBaseDamage: 20, energyWaveDamageMultiplier: 0, energyWaveCooldown: 30000, lastEnergyWaveTime: 0 };
+            zombies = []; bullets = []; energyWaves = []; currentBoss = null; wave = 0; score = 0; nextUniqueId = 0;
+            lastShotTime = 0; player.currentBulletInBurst = 0; timeOfLastBurstBullet = 0; 
+            const now = performance.now(); player.lastHpRegenTime = now; player.lastEnergyWaveTime = now - player.energyWaveCooldown + 5000;
+            oldBackgroundImage = null; 
+            crossfadeProgress = 1;    
+            if (autoChangeBackground && !isFetchingNextBackground && !nextBackgroundImage) {
+                fetchNextBackgroundImage();
+            }
+        }
+
+        function initGame(isNewGame = false) {
+            gameOverScreen.style.display = 'none'; skillModal.style.display = 'none'; skillBookModal.style.display = 'none'; bossRewardModal.style.display = 'none';
+            
+            const savedAutoBg = localStorage.getItem('zombieSiegeAutoBg');
+            if (savedAutoBg !== null) {
+                autoChangeBackground = JSON.parse(savedAutoBg);
+            }
+            toggleBgBtn.textContent = `更换背景: ${autoChangeBackground ? '开' : '关'}`;
+
+
+            if (!isNewGame && localStorage.getItem('zombieSiegeSaveData')) { startGamePrompt.style.display = 'block'; gameRunning = false; if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; } return; }
+            startGamePrompt.style.display = 'none'; 
+            initializeNewGameVariables(); 
+            gameRunning = true; skillSelectionActive = false; skillBookOpen = false; bossRewardModalActive = false;
+            advanceWave(); updateUI(); startGameManager(); 
+        }
+
+        function startNewGame(fromGameOver = false) {
+            if (fromGameOver) gameOverScreen.style.display = 'none'; startGamePrompt.style.display = 'none';
+            if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            initGame(true);
+        }
+
+        function continueGame() {
+            startGamePrompt.style.display = 'none'; if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            const loaded = loadGame(); 
+            if (loaded) { 
+                if (player.hp <= 0) { updateUI(); gameOver(); return; } 
+                gameRunning = true; skillSelectionActive = false; skillBookOpen = false; bossRewardModalActive = false; 
+                if (autoChangeBackground && !isFetchingNextBackground && !nextBackgroundImage) { fetchNextBackgroundImage(); }
+                updateUI(); startGameManager(); 
+            } 
+            else { alert("存档加载失败，开始新游戏。"); startNewGame(); }
+        }
+
+        function saveGame() {
+            if (!player) { alert("游戏尚未开始，无法保存。"); return; }
+            const saveData = { player: JSON.parse(JSON.stringify(player)), zombies: JSON.parse(JSON.stringify(zombies)), bullets: bullets.map(bullet => ({ ...bullet, hitTargets: bullet.hitTargets ? Array.from(bullet.hitTargets) : [] })), energyWaves: energyWaves.map(ew => ({ ...ew, hitZombies: Array.from(ew.hitZombies) })), currentBoss: currentBoss ? JSON.parse(JSON.stringify(currentBoss)) : null, wave, score, nextUniqueId, lastShotTime, timeOfLastBurstBullet };
+            try { 
+                localStorage.setItem('zombieSiegeSaveData', JSON.stringify(saveData)); 
+                localStorage.setItem('zombieSiegeAutoBg', JSON.stringify(autoChangeBackground));
+                alert('游戏已保存!'); 
+            } catch (e) { alert('保存游戏失败，可能是存储已满。'); }
+        }
+
+        function loadGame() {
+            const saveDataString = localStorage.getItem('zombieSiegeSaveData'); 
+            const autoBgString = localStorage.getItem('zombieSiegeAutoBg');
+            if (autoBgString !== null) {
+                autoChangeBackground = JSON.parse(autoBgString);
+                toggleBgBtn.textContent = `更换背景: ${autoChangeBackground ? '开' : '关'}`;
+            }
+
+            if (!saveDataString) return false;
+            try {
+                const saveData = JSON.parse(saveDataString); player = saveData.player; zombies = saveData.zombies;
+                bullets = saveData.bullets.map(bulletData => ({ ...bulletData, hitTargets: new Set(bulletData.hitTargets || []) }));
+                energyWaves = saveData.energyWaves.map(ew => ({ ...ew, hitZombies: new Set(ew.hitZombies) }));
+                currentBoss = saveData.currentBoss || null; wave = saveData.wave; score = saveData.score; nextUniqueId = saveData.nextUniqueId;
+                const currentLoadTime = performance.now(); const MAX_TIMER_SKEW = 30 * 60 * 1000; 
+                if (Math.abs(currentLoadTime - player.lastHpRegenTime) > MAX_TIMER_SKEW) player.lastHpRegenTime = currentLoadTime; 
+                if (Math.abs(currentLoadTime - player.lastEnergyWaveTime) > MAX_TIMER_SKEW) player.lastEnergyWaveTime = currentLoadTime - player.energyWaveCooldown + 5000; 
+                lastShotTime = currentLoadTime - ((player.shootCooldown || PLAYER_SHOOT_COOLDOWN) + 200); timeOfLastBurstBullet = currentLoadTime - (INTER_BULLET_DELAY + 200); player.currentBulletInBurst = 0; 
+                player.slimes = player.slimes || []; player.learnedSkills = player.learnedSkills || {};
+                player.initialBulletDamage = typeof player.initialBulletDamage === 'number' ? player.initialBulletDamage : INITIAL_BULLET_DAMAGE; player.bulletFlatDamageBonus = typeof player.bulletFlatDamageBonus === 'number' ? player.bulletFlatDamageBonus : 0; player.bulletDamageMultiplier = typeof player.bulletDamageMultiplier === 'number' ? player.bulletDamageMultiplier : 0; player.projectileCount = typeof player.projectileCount === 'number' ? player.projectileCount : 1; player.bulletsPerShot = typeof player.bulletsPerShot === 'number' ? player.bulletsPerShot : 1; player.shootCooldown = typeof player.shootCooldown === 'number' ? player.shootCooldown : PLAYER_SHOOT_COOLDOWN;
+                player.slimeBaseDamage = typeof player.slimeBaseDamage === 'number' ? player.slimeBaseDamage : 20; player.slimeDamagePercentMultiplier = typeof player.slimeDamagePercentMultiplier === 'number' ? player.slimeDamagePercentMultiplier : 0; player.slimeSpeedMultiplier = typeof player.slimeSpeedMultiplier === 'number' ? player.slimeSpeedMultiplier : 1; player.hasEnergyWave = typeof player.hasEnergyWave === 'boolean' ? player.hasEnergyWave : false; player.energyWaveBaseDamage = typeof player.energyWaveBaseDamage === 'number' ? player.energyWaveBaseDamage : 20; player.energyWaveDamageMultiplier = typeof player.energyWaveDamageMultiplier === 'number' ? player.energyWaveDamageMultiplier : 0; player.energyWaveCooldown = typeof player.energyWaveCooldown === 'number' ? player.energyWaveCooldown : 30000;
+                
+                if (currentBoss) { 
+                    currentBoss.speed = currentBoss.speed || BOSS_STATS.speed;
+                    currentBoss.pathTargetX = currentBoss.pathTargetX || 0;
+                    currentBoss.pathTargetY = currentBoss.pathTargetY || 0;
+                    currentBoss.pathSegment = currentBoss.pathSegment || 0;
+                    currentBoss.currentPathDimension = currentBoss.currentPathDimension || (Math.min(canvas.width, canvas.height) * BOSS_STATS.initialPathDimensionFactor);
+                    currentBoss.spiralCenterX = currentBoss.spiralCenterX || player.x; 
+                    currentBoss.spiralCenterY = currentBoss.spiralCenterY || player.y;
+                }
+                player.slimes.forEach(s => {
+                    s.targetEnemyId = s.targetEnemyId || null;
+                    s.targetIsBoss = typeof s.targetIsBoss === 'boolean' ? s.targetIsBoss : false;
+                    s.lastDamageApplicationTimes = s.lastDamageApplicationTimes || {};
+                });
+                return true;
+            } catch (e) { console.error("Load game error:", e); localStorage.removeItem('zombieSiegeSaveData'); return false; }
+        }
+
+        function calculateBulletDamage() { let baseDmg = player.initialBulletDamage + player.bulletFlatDamageBonus; let finalDmg = baseDmg * (1 + player.bulletDamageMultiplier); return parseFloat(Math.max(finalDmg, player.initialBulletDamage * 0.2).toFixed(1));}
+        function calculateSlimeDamage() { return parseFloat(Math.max(player.slimeBaseDamage * (1 + player.slimeDamagePercentMultiplier), player.slimeBaseDamage * 0.2).toFixed(1)); }
+        function calculateEnergyWaveDamage() { return parseFloat(Math.max(player.energyWaveBaseDamage * (1 + player.energyWaveDamageMultiplier), player.energyWaveBaseDamage * 0.2).toFixed(1));}
+        
+        function getXpNeededForLevel(level) {
+            if (level <= 0) return 0;
+            if (level <= XP_BASE_LEVEL_UP_UNTIL) {
+                return XP_PER_LEVEL[level] || XP_PER_LEVEL[XP_PER_LEVEL.length -1]; // XP_PER_LEVEL[0] is for level 1
+            } else {
+                // Calculate XP for levels beyond the array
+                let xpNeeded = XP_PER_LEVEL[XP_PER_LEVEL.length - 1];
+                for (let i = XP_BASE_LEVEL_UP_UNTIL + 1; i <= level; i++) {
+                    xpNeeded = Math.floor(xpNeeded * XP_POST_BASE_MULTIPLIER) + XP_POST_BASE_FLAT_INCREASE * (i - XP_BASE_LEVEL_UP_UNTIL);
+                }
+                return xpNeeded;
+            }
+        }
+
+
+        function updateUI() {
+            if (!player) return;
+            playerHpDisplay.textContent = Math.max(0, Math.ceil(player.hp)); playerMaxHpDisplay.textContent = player.maxHp; playerHpBar.style.width = `${(Math.max(0, player.hp) / player.maxHp) * 100}%`;
+            
+            const xpNeeded = getXpNeededForLevel(player.level);
+
+            playerXpDisplay.textContent = player.xp; xpToLevelUpDisplay.textContent = xpNeeded; playerLevelDisplay.textContent = player.level; playerXpBar.style.width = xpNeeded === Infinity || xpNeeded === 0 ? '100%' : `${(player.xp / xpNeeded) * 100}%`;
+            bulletDamageDisplay.textContent = calculateBulletDamage(); projectileCountDisplay.textContent = player.projectileCount; bulletsPerShotDisplay.textContent = player.bulletsPerShot; bulletPierceCountDisplay.textContent = player.bulletPierceCount;
+            hpRegenPer5SecDisplay.textContent = player.hpRegenPer5Sec; xpGainMultiplierDisplay.textContent = `${(player.xpGainMultiplier * 100).toFixed(0)}%`;
+            slimeCountDisplay.textContent = player.slimes.length; slimeDamageDisplay.textContent = calculateSlimeDamage(); slimeSpeedMultiplierDisplay.textContent = `${(player.slimeSpeedMultiplier * 100).toFixed(0)}%`;
+            hasEnergyWaveDisplay.textContent = player.hasEnergyWave ? '是' : '否'; energyWaveDamageDisplay.textContent = calculateEnergyWaveDamage(); energyWaveCooldownDisplay.textContent = (player.energyWaveCooldown / 1000).toFixed(1);
+            waveCountDisplay.textContent = wave; scoreCountDisplay.textContent = score;
+
+            if (currentBoss && currentBoss.hp > 0) {
+                middleStatsTitle.textContent = "当前BOSS属性"; middleStatsTitle.style.display = 'block';
+                zombieTypeStatContainers.forEach(c => c.style.display = 'none'); zombieStatsNote.style.display = 'none'; bossStatsDisplay.style.display = 'block';
+                bossHpDisplay.textContent = Math.ceil(currentBoss.hp); bossMaxHpDisplay.textContent = Math.ceil(currentBoss.maxHp); 
+                bossSpeedDisplay.textContent = currentBoss.speed.toFixed(2); 
+            } else {
+                middleStatsTitle.textContent = "当前波数僵尸属性"; middleStatsTitle.style.display = 'block';
+                zombieTypeStatContainers.forEach(c => c.style.display = 'block'); zombieStatsNote.style.display = 'block'; bossStatsDisplay.style.display = 'none';
+                for (const typeKey in ZOMBIE_TYPES) {
+                    const baseZombie = ZOMBIE_TYPES[typeKey]; let currentHp, currentDamage, currentSpeed;
+                    let waveHpFactor = 0.1; let waveDmgFactor = 1; let waveSpeedFactor = 0.003;
+                    let exponentialHpFactor = 1; let exponentialDmgFactor = 1;
+
+                    if (wave > 100) { 
+                        waveHpFactor = 0.25; // Increased base scaling
+                        waveDmgFactor = 2.0;   // Increased base scaling
+                        waveSpeedFactor = 0.006; // Increased base scaling
+                        // Apply exponential scaling for waves far past 100
+                        exponentialHpFactor = Math.pow(1.007, Math.max(0, wave - 100)); // 0.7% HP increase per wave after 100
+                        exponentialDmgFactor = Math.pow(1.005, Math.max(0, wave - 100)); // 0.5% Dmg increase per wave after 100
+                    }
+
+                    if (wave > 0) { 
+                        const waveHpBonus = Math.floor(wave / 2) * (baseZombie.hp * waveHpFactor); // Faster HP scaling interval
+                        const waveDmgBonus = Math.floor(wave / 3) * waveDmgFactor; // Faster Dmg scaling interval
+                        currentHp = (baseZombie.hp + waveHpBonus) * exponentialHpFactor; 
+                        currentDamage = (baseZombie.damage + waveDmgBonus) * exponentialDmgFactor; 
+                        currentSpeed = baseZombie.speed * (1 + wave * waveSpeedFactor); 
+                    } else { currentHp = baseZombie.hp; currentDamage = baseZombie.damage; currentSpeed = baseZombie.speed; }
+
+                    if (typeKey === 'normal') { zombieNormalHpDisplay.textContent = currentHp.toFixed(0); zombieNormalDamageDisplay.textContent = currentDamage.toFixed(0); zombieNormalSpeedDisplay.textContent = currentSpeed.toFixed(2); } 
+                    else if (typeKey === 'fast') { zombieFastHpDisplay.textContent = currentHp.toFixed(0); zombieFastDamageDisplay.textContent = currentDamage.toFixed(0); zombieFastSpeedDisplay.textContent = currentSpeed.toFixed(2); } 
+                    else if (typeKey === 'tank') { zombieTankHpDisplay.textContent = currentHp.toFixed(0); zombieTankDamageDisplay.textContent = currentDamage.toFixed(0); zombieTankSpeedDisplay.textContent = currentSpeed.toFixed(2); }
+                }
+            }
+        }
+
+        function advanceWave() {
+            wave++; 
+            if (autoChangeBackground && wave > 1 && wave % 5 === 0 && nextBackgroundImage) {
+                if (backgroundImage !== nextBackgroundImage) { 
+                    oldBackgroundImage = backgroundImage;
+                }
+                backgroundImage = nextBackgroundImage;
+                backgroundImageProcessed = true; 
+                crossfadeProgress = 0; 
+                nextBackgroundImage = null; 
+                fetchNextBackgroundImage(); 
+            } else if (autoChangeBackground && !isFetchingNextBackground && !nextBackgroundImage) {
+                fetchNextBackgroundImage();
+            }
+
+            if (currentBoss && currentBoss.hp > 0) return; 
+            currentBoss = null; 
+            if (wave > 0 && wave % 10 === 0) { zombies = []; spawnBoss(); } 
+            else { 
+                let numZombiesBase = 5;
+                let numZombiesPerWave = 2;
+                if (wave > 100) {
+                    numZombiesPerWave = 4; // Significantly more zombies
+                } else if (wave > 50) {
+                    numZombiesPerWave = 3;
+                }
+                const numZombies = numZombiesBase + wave * numZombiesPerWave; 
+                for (let i = 0; i < numZombies; i++) spawnZombie(); 
+            }
+            updateUI(); 
+        }
+
+        function spawnZombie() { 
+            let x, y; const edge = Math.floor(Math.random() * 4);
+            const spawnMargin = 30; 
+
+            if (edge === 0) { x = Math.random() * canvas.width; y = -spawnMargin; } 
+            else if (edge === 1) { x = canvas.width + spawnMargin; y = Math.random() * canvas.height; } 
+            else if (edge === 2) { x = Math.random() * canvas.width; y = canvas.height + spawnMargin; } 
+            else { x = -spawnMargin; y = Math.random() * canvas.height; } 
+
+
+            let typeKey = 'normal'; const randType = Math.random();
+            if (wave > 2 && randType > 0.65) typeKey = 'fast'; if (wave > 4 && randType > 0.85) typeKey = 'tank';
+            const type = ZOMBIE_TYPES[typeKey];
+            
+            let waveHpFactor = 0.1; let waveDmgFactor = 1; let waveSpeedFactor = 0.003;
+            let exponentialHpFactor = 1; let exponentialDmgFactor = 1;
+
+            if (wave > 100) { 
+                waveHpFactor = 0.25; 
+                waveDmgFactor = 2.2;   
+                waveSpeedFactor = 0.0065; 
+                exponentialHpFactor = Math.pow(1.008, Math.max(0, wave - 100)); 
+                exponentialDmgFactor = Math.pow(1.006, Math.max(0, wave - 100));
+            } else if (wave > 50) {
+                waveHpFactor = 0.15; 
+                waveDmgFactor = 1.5;   
+                waveSpeedFactor = 0.004;
+            }
+
+
+            const waveHpBonus = Math.floor(wave / 2) * (type.hp * waveHpFactor); 
+            const waveDmgBonus = Math.floor(wave / 3) * waveDmgFactor; 
+            const currentHp = (type.hp + waveHpBonus) * exponentialHpFactor; 
+            const currentDamage = (type.damage + waveDmgBonus) * exponentialDmgFactor; 
+            const currentSpeed = type.speed * (1 + wave * waveSpeedFactor); 
+            
+            zombies.push({ id: nextUniqueId++, x, y, hp: currentHp, maxHp: currentHp, speed: currentSpeed, damage: currentDamage, xp: type.xp, color: type.color, size: type.size, type: typeKey });
+        }
+        
+        function setBossPathTarget(boss) {
+            const halfDim = boss.currentPathDimension / 2;
+            switch (boss.pathSegment) {
+                case 0: 
+                    boss.pathTargetX = boss.spiralCenterX + halfDim;
+                    boss.pathTargetY = boss.spiralCenterY - halfDim;
+                    break;
+                case 1: 
+                    boss.pathTargetX = boss.spiralCenterX + halfDim;
+                    boss.pathTargetY = boss.spiralCenterY + halfDim;
+                    break;
+                case 2: 
+                    boss.pathTargetX = boss.spiralCenterX - halfDim;
+                    boss.pathTargetY = boss.spiralCenterY + halfDim;
+                    break;
+                case 3: 
+                    boss.pathTargetX = boss.spiralCenterX - halfDim;
+                    boss.pathTargetY = boss.spiralCenterY - halfDim;
+                    let shrinkMultiplier = 1;
+                    let pathShrinkBase = BOSS_STATS.pathShrinkAmount;
+                    if (wave > 100) { shrinkMultiplier = 1.35; pathShrinkBase = BOSS_STATS.pathShrinkAmount * 1.2; } 
+                    else if (wave > 50) { shrinkMultiplier = 1.15; }
+                    
+                    boss.currentPathDimension -= (pathShrinkBase * shrinkMultiplier) * (1 + (Math.floor(wave / 10) -1) * 0.1) ; 
+                    boss.currentPathDimension = Math.max(boss.size * 2, boss.currentPathDimension); 
+                    break;
+            }
+            boss.pathTargetX = Math.max(-boss.size * 2, Math.min(canvas.width + boss.size * 2, boss.pathTargetX));
+            boss.pathTargetY = Math.max(-boss.size * 2, Math.min(canvas.height + boss.size * 2, boss.pathTargetY));
+        }
+
+        function spawnBoss() {
+            const bossLevelMultiplier = Math.max(0, Math.floor(wave / 10) - 1); 
+            let bossSpeedMultiplier = 1;
+            let bossHpMultiplier = 0.75;
+            let bossXpMultiplier = 0.5;
+
+            if (wave > 100) { 
+                bossSpeedMultiplier = 1.4; 
+                bossHpMultiplier = 1.2; 
+                bossXpMultiplier = 0.7;
+            } else if (wave > 50) {
+                bossSpeedMultiplier = 1.15;
+                bossHpMultiplier = 0.9;
+                bossXpMultiplier = 0.6;
+            }
+
+
+            const bossSpeed = BOSS_STATS.speed * (1 + bossLevelMultiplier * 0.1 * bossSpeedMultiplier) ;
+            const initialDim = Math.min(canvas.width, canvas.height) * BOSS_STATS.initialPathDimensionFactor;
+
+            currentBoss = {
+                id: BOSS_STATS.id,
+                x: player.x - initialDim / 2, 
+                y: player.y - initialDim / 2,
+                hp: BOSS_STATS.hp * (1 + bossLevelMultiplier * bossHpMultiplier), 
+                maxHp: BOSS_STATS.hp * (1 + bossLevelMultiplier * bossHpMultiplier),
+                color: BOSS_STATS.color,
+                size: BOSS_STATS.size,
+                damage: BOSS_STATS.damage,
+                xp: BOSS_STATS.xp * (1 + bossLevelMultiplier * bossXpMultiplier),
+                speed: bossSpeed,
+                pathSegment: 0, 
+                currentPathDimension: initialDim,
+                spiralCenterX: player.x, 
+                spiralCenterY: player.y,
+                pathTargetX: 0, pathTargetY: 0 
+            };
+            setBossPathTarget(currentBoss); 
+        }
+
+
+        function drawPlayer() { 
+            if (!player) return; 
+            ctx.fillStyle = player.color; 
+            ctx.fillRect(player.x - player.size / 2, player.y - player.size / 2, player.size, player.size); 
+            const nearestTarget = (currentBoss && currentBoss.hp > 0) ? currentBoss : findNearestZombie(player.x, player.y, zombies); 
+            if (nearestTarget) { 
+                const angle = Math.atan2(nearestTarget.y - player.y, nearestTarget.x - player.x); 
+                ctx.save(); 
+                ctx.translate(player.x, player.y); 
+                ctx.rotate(angle); 
+                ctx.fillStyle = '#ecf0f1'; 
+                ctx.fillRect(0, -2, player.size * 0.75, 4); 
+                ctx.restore(); 
+            }
+        }
+        function drawZombies() { zombies.forEach(zombie => { ctx.fillStyle = zombie.color; ctx.fillRect(zombie.x - zombie.size / 2, zombie.y - zombie.size / 2, zombie.size, zombie.size); if (zombie.hp < zombie.maxHp) { const barWidth = zombie.size; const barHeight = 3; const barY = zombie.y - zombie.size / 2 - barHeight - 2; ctx.fillStyle = 'rgba(192, 57, 43, 0.7)'; ctx.fillRect(zombie.x - barWidth / 2, barY, barWidth, barHeight); ctx.fillStyle = 'rgba(46, 204, 113, 0.9)'; ctx.fillRect(zombie.x - barWidth / 2, barY, barWidth * (zombie.hp / zombie.maxHp), barHeight); }});}
+        function drawBoss() { if (!currentBoss || currentBoss.hp <=0) return; ctx.fillStyle = currentBoss.color; ctx.fillRect(currentBoss.x - currentBoss.size / 2, currentBoss.y - currentBoss.size / 2, currentBoss.size, currentBoss.size); if (currentBoss.hp < currentBoss.maxHp) { const barWidth = currentBoss.size * 1.5; const barHeight = 8; const barY = currentBoss.y - currentBoss.size / 2 - barHeight - 5; ctx.fillStyle = 'rgba(192, 57, 43, 0.7)'; ctx.fillRect(currentBoss.x - barWidth / 2, barY, barWidth, barHeight); ctx.fillStyle = 'rgba(46, 204, 113, 0.9)'; ctx.fillRect(currentBoss.x - barWidth / 2, barY, barWidth * (Math.max(0,currentBoss.hp) / currentBoss.maxHp), barHeight); }}
+        function drawBullets() { bullets.forEach(bullet => { ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2); ctx.fill(); }); }
+        function drawSlimes() { if (!player || !player.slimes) return; player.slimes.forEach(slime => { ctx.fillStyle = slime.color; ctx.beginPath(); ctx.arc(slime.x, slime.y, slime.size, 0, Math.PI * 2); ctx.fill(); });}
+        function drawEnergyWaves() { energyWaves.forEach(wave => { ctx.strokeStyle = wave.color; ctx.lineWidth = wave.thickness; ctx.beginPath(); ctx.arc(wave.x, wave.y, wave.radius, 0, Math.PI * 2); ctx.stroke(); });}
+        
+        function findNearestZombie(fromX, fromY, zombieList) { let nearest = null; let minDist = Infinity; zombieList.forEach(zombie => { const dist = Math.hypot(zombie.x - fromX, zombie.y - fromY); if (dist < minDist) { minDist = dist; nearest = zombie; } }); return nearest; }
+        
+        function fireOneSetOfBullets(currentTime) {
+            if (!player) return; const nearestTarget = (currentBoss && currentBoss.hp > 0) ? currentBoss : findNearestZombie(player.x, player.y, zombies); if (!nearestTarget) return;
+            const angleToTarget = Math.atan2(nearestTarget.y - player.y, nearestTarget.x - player.x); const bulletDamage = calculateBulletDamage(); 
+            const projectileSpread = player.projectileCount > 1 ? Math.PI / (9 + player.projectileCount * 1.5) : 0; let fanCenterAngle = angleToTarget; 
+            if (player.projectileCount > 1 && player.projectileCount % 2 === 0) fanCenterAngle -= projectileSpread / 2; 
+            for (let i = 0; i < player.projectileCount; i++) { const currentAngle = fanCenterAngle - (projectileSpread * (player.projectileCount - 1) / 2) + (i * projectileSpread); const bulletSpawnDist = player.size * 0.5; const offsetX = Math.cos(currentAngle) * bulletSpawnDist; const offsetY = Math.sin(currentAngle) * bulletSpawnDist; bullets.push({ x: player.x + offsetX, y: player.y + offsetY, dx: Math.cos(currentAngle) * 7, dy: Math.sin(currentAngle) * 7, damage: bulletDamage, pierceRemaining: player.bulletPierceCount, hitTargets: new Set() }); }
+            timeOfLastBurstBullet = currentTime;
+        }
+
+        function updatePlayer(currentTime) {
+            if (skillSelectionActive || skillBookOpen || bossRewardModalActive || !player || !gameRunning) return;
+            
+            player.x = Math.max(player.size / 2, Math.min(canvas.width - player.size / 2, player.x));
+            player.y = Math.max(player.size / 2, Math.min(canvas.height - player.size / 2, player.y));
+
+            if (player.hpRegenPer5Sec > 0 && currentTime - player.lastHpRegenTime > 5000) { player.hp = Math.min(player.hp + player.hpRegenPer5Sec, player.maxHp); player.lastHpRegenTime = currentTime; updateUI(); }
+            if (player.currentBulletInBurst === 0 && currentTime - lastShotTime > player.shootCooldown) { fireOneSetOfBullets(currentTime); lastShotTime = currentTime; player.currentBulletInBurst = 1; } 
+            else if (player.currentBulletInBurst > 0 && player.currentBulletInBurst < player.bulletsPerShot && currentTime - timeOfLastBurstBullet > INTER_BULLET_DELAY) { fireOneSetOfBullets(currentTime); player.currentBulletInBurst++; }
+            if (player.currentBulletInBurst >= player.bulletsPerShot) player.currentBulletInBurst = 0; 
+            if (player.hasEnergyWave && currentTime - player.lastEnergyWaveTime > player.energyWaveCooldown) { energyWaves.push({ x: player.x, y: player.y, radius: 10, maxRadius: Math.max(canvas.width, canvas.height) * 0.8, speed: 0.8, thickness: 3, color: 'rgba(255, 100, 0, 0.6)', damage: calculateEnergyWaveDamage(), hitZombies: new Set() }); player.lastEnergyWaveTime = currentTime; }
+        }
+
+        function updateSlimes(currentTime) {
+            if (skillBookOpen || skillSelectionActive || bossRewardModalActive || !player || !player.slimes || !gameRunning) return;
+            const slimeDamage = calculateSlimeDamage();
+
+            player.slimes.forEach(slime => {
+                let currentTarget = null;
+
+                if (slime.targetEnemyId !== null) {
+                    if (slime.targetIsBoss) {
+                        if (currentBoss && currentBoss.id === slime.targetEnemyId && currentBoss.hp > 0) {
+                            currentTarget = currentBoss;
+                        } else {
+                            slime.targetEnemyId = null; slime.targetIsBoss = false;
+                        }
+                    } else {
+                        const zombieTarget = zombies.find(z => z.id === slime.targetEnemyId && z.hp > 0);
+                        if (zombieTarget) {
+                            currentTarget = zombieTarget;
+                        } else {
+                            slime.targetEnemyId = null; 
+                        }
+                    }
+                }
+
+                if (currentTarget === null) {
+                    if (currentBoss && currentBoss.hp > 0) {
+                        currentTarget = currentBoss;
+                        slime.targetEnemyId = currentBoss.id;
+                        slime.targetIsBoss = true;
+                    } else if (zombies.length > 0) {
+                        const nearestZombie = findNearestZombie(slime.x, slime.y, zombies);
+                        if (nearestZombie) {
+                            currentTarget = nearestZombie;
+                            slime.targetEnemyId = nearestZombie.id;
+                            slime.targetIsBoss = false;
+                        }
+                    }
+                }
+
+                if (currentTarget) {
+                    const angleToTarget = Math.atan2(currentTarget.y - slime.y, currentTarget.x - slime.x);
+                    const currentSlimeSpeed = slime.speed * player.slimeSpeedMultiplier;
+                    slime.x += Math.cos(angleToTarget) * currentSlimeSpeed;
+                    slime.y += Math.sin(angleToTarget) * currentSlimeSpeed;
+
+                    if (Math.hypot(slime.x - currentTarget.x, slime.y - currentTarget.y) < slime.size + currentTarget.size / 2) {
+                        if (!slime.lastDamageApplicationTimes[currentTarget.id] || currentTime - slime.lastDamageApplicationTimes[currentTarget.id] > 1000) {
+                            currentTarget.hp -= slimeDamage;
+                            slime.lastDamageApplicationTimes[currentTarget.id] = currentTime;
+                            updateUI(); 
+
+                            if (currentTarget.hp <= 0) {
+                                if (slime.targetIsBoss) {
+                                    handleBossDefeat(); 
+                                } else {
+                                    zombies = zombies.filter(z => z.id !== currentTarget.id);
+                                    score += Math.floor(ZOMBIE_TYPES[currentTarget.type].xp * player.xpGainMultiplier * 0.5);
+                                }
+                                slime.targetEnemyId = null; 
+                                slime.targetIsBoss = false;
+                                if (currentBoss && currentBoss.hp > 0) {
+                                    slime.targetEnemyId = currentBoss.id;
+                                    slime.targetIsBoss = true;
+                                } else if (zombies.length > 0) {
+                                     const newNearest = findNearestZombie(slime.x, slime.y, zombies);
+                                     if(newNearest) {
+                                        slime.targetEnemyId = newNearest.id;
+                                        slime.targetIsBoss = false;
+                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+
+        function updateEnergyWaves() {
+            if (!gameRunning) return;
+            for (let i = energyWaves.length - 1; i >= 0; i--) {
+                const wave = energyWaves[i]; wave.radius += wave.speed;
+                if (wave.radius > wave.maxRadius) { energyWaves.splice(i, 1); continue; }
+                for (let j = zombies.length - 1; j >= 0; j--) {
+                    const zombie = zombies[j]; if (!wave.hitZombies.has(zombie.id)) {
+                        const dist = Math.hypot(zombie.x - wave.x, zombie.y - wave.y);
+                        if (dist >= wave.radius - zombie.size / 2 - wave.thickness && dist <= wave.radius + zombie.size / 2 + wave.thickness) {
+                            zombie.hp -= wave.damage; wave.hitZombies.add(zombie.id);
+                            if (zombie.hp <= 0) { zombies.splice(j, 1); score += Math.floor(ZOMBIE_TYPES[zombie.type].xp * player.xpGainMultiplier * 0.75); updateUI(); }
+                        }
+                    }
+                }
+                if (currentBoss && currentBoss.hp > 0 && !wave.hitZombies.has(currentBoss.id)) {
+                    const dist = Math.hypot(currentBoss.x - wave.x, currentBoss.y - wave.y);
+                    if (dist >= wave.radius - currentBoss.size / 2 - wave.thickness && dist <= wave.radius + currentBoss.size / 2 + wave.thickness) {
+                        currentBoss.hp -= wave.damage; wave.hitZombies.add(currentBoss.id); updateUI();
+                        if (currentBoss.hp <= 0) handleBossDefeat();
+                    }
+                }
+            }
+        }
+
+        function updateZombies() {
+            if (skillBookOpen || skillSelectionActive || bossRewardModalActive || !player || !gameRunning) return;
+            for (let i = zombies.length - 1; i >= 0; i--) {
+                const zombie = zombies[i];
+                const angle = Math.atan2(player.y - zombie.y, player.x - zombie.x); 
+                zombie.x += Math.cos(angle) * zombie.speed; 
+                zombie.y += Math.sin(angle) * zombie.speed;
+                
+                if (Math.hypot(player.x - zombie.x, player.y - zombie.y) < (player.size / 2 + zombie.size / 2)) { 
+                    player.hp -= zombie.damage; 
+                    zombies.splice(i, 1); 
+                    if (player.hp <= 0) gameOver(); 
+                    updateUI(); 
+                }
+            }
+        }
+       
+        function updateBoss() {
+            if (skillBookOpen || skillSelectionActive || bossRewardModalActive || !currentBoss || !player || !gameRunning || currentBoss.hp <= 0) return;
+
+            currentBoss.spiralCenterX = player.x;
+            currentBoss.spiralCenterY = player.y;
+            
+            const tempSegment = currentBoss.pathSegment;
+            const tempDimension = currentBoss.currentPathDimension;
+            setBossPathTarget(currentBoss); 
+            if (tempSegment === 3 && currentBoss.pathSegment === 0 && currentBoss.currentPathDimension < tempDimension) {
+                 setBossPathTarget(currentBoss); 
+            }
+
+            let dx = currentBoss.pathTargetX - currentBoss.x;
+            let dy = currentBoss.pathTargetY - currentBoss.y;
+            const distToTarget = Math.hypot(dx, dy);
+
+            if (distToTarget < currentBoss.speed + 1.5) { 
+                currentBoss.x = currentBoss.pathTargetX;
+                currentBoss.y = currentBoss.pathTargetY;
+                currentBoss.pathSegment = (currentBoss.pathSegment + 1) % 4;
+                setBossPathTarget(currentBoss); 
+            } else {
+                currentBoss.x += (dx / distToTarget) * currentBoss.speed;
+                currentBoss.y += (dy / distToTarget) * currentBoss.speed;
+            }
+            
+            if (Math.hypot(player.x - currentBoss.x, player.y - currentBoss.y) < (player.size / 2 + currentBoss.size / 2)) {
+                 player.hp = 0;
+                 gameOver();
+                 return;
+            }
+             if (currentBoss.currentPathDimension <= currentBoss.size * 2) { 
+                 const angleToPlayer = Math.atan2(player.y - currentBoss.y, player.x - currentBoss.x);
+                 currentBoss.x += Math.cos(angleToPlayer) * currentBoss.speed; 
+                 currentBoss.y += Math.sin(angleToPlayer) * currentBoss.speed;
+            }
+        }
+
+
+        function updateBullets() {
+            if (skillBookOpen || skillSelectionActive || bossRewardModalActive || !gameRunning) return;
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i]; bullet.x += bullet.dx; bullet.y += bullet.dy;
+                if (!bullet.hitTargets) bullet.hitTargets = new Set();
+                if (bullet.x < -50 || bullet.x > canvas.width + 50 || bullet.y < -50 || bullet.y > canvas.height + 50) { 
+                    bullets.splice(i, 1); continue; 
+                }
+                let bulletRemovedThisIteration = false; 
+                for (let j = zombies.length - 1; j >= 0; j--) {
+                    if (bulletRemovedThisIteration) break; const zombie = zombies[j]; if (bullet.hitTargets.has(zombie.id)) continue;
+                    if (Math.hypot(bullet.x - zombie.x, bullet.y - zombie.y) < (zombie.size / 2 + 3)) { 
+                        zombie.hp -= bullet.damage; bullet.hitTargets.add(zombie.id); 
+                        if (zombie.hp <= 0) { zombies.splice(j, 1); const gainedXp = Math.floor(ZOMBIE_TYPES[zombie.type].xp * player.xpGainMultiplier); player.xp += gainedXp; score += gainedXp; checkLevelUp(); updateUI(); }
+                        if (bullet.pierceRemaining > 0) bullet.pierceRemaining--; else { bullets.splice(i, 1); bulletRemovedThisIteration = true; }
+                    }
+                }
+                if (bulletRemovedThisIteration) continue;
+                if (currentBoss && currentBoss.hp > 0 && !bullet.hitTargets.has(currentBoss.id)) {
+                    if (Math.hypot(bullet.x - currentBoss.x, bullet.y - currentBoss.y) < (currentBoss.size / 2 + 3)) {
+                        currentBoss.hp -= bullet.damage; bullet.hitTargets.add(currentBoss.id); updateUI();
+                        if (currentBoss.hp <= 0) handleBossDefeat();
+                        if (bullet.pierceRemaining > 0) bullet.pierceRemaining--; else bullets.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        function handleBossDefeat() {
+            if (!currentBoss) return;
+            const bossXp = Math.floor(currentBoss.xp * player.xpGainMultiplier);
+            score += bossXp; player.xp += bossXp;
+            checkLevelUp(); 
+            
+            currentBoss = null; 
+
+            const grantedSkills = [];
+            let availableChoices = ALL_SKILLS.filter(skill => { const currentStacks = player.learnedSkills[skill.id] || 0; if (skill.maxStacks !== undefined && currentStacks >= skill.maxStacks) return false; if (skill.prerequisite && !(player.learnedSkills[skill.prerequisite] > 0)) return false; return true; });
+            for (let i = 0; i < 3 && availableChoices.length > 0; i++) { const randomIndex = Math.floor(Math.random() * availableChoices.length); const chosenSkill = availableChoices.splice(randomIndex, 1)[0]; chosenSkill.apply(player); player.learnedSkills[chosenSkill.id] = (player.learnedSkills[chosenSkill.id] || 0) + 1; grantedSkills.push(chosenSkill); }
+            presentBossRewardModal(grantedSkills); updateUI(); 
+        }
+
+        function presentBossRewardModal(skills) {
+            bossRewardModalActive = true; bossRewardSkillList.innerHTML = '';
+            if (skills.length === 0) { bossRewardSkillList.innerHTML = '<p>没有可授予的新技能。</p>'; } 
+            else { const ul = document.createElement('ul'); skills.forEach(skill => { const li = document.createElement('li'); li.textContent = skill.name; ul.appendChild(li); }); bossRewardSkillList.appendChild(ul); }
+            bossRewardModal.style.display = 'block'; let timeLeft = 6; bossRewardTimerDisplay.textContent = `关闭倒计时: ${timeLeft}s`;
+            if (bossRewardCountdownIntervalId) clearInterval(bossRewardCountdownIntervalId);
+            bossRewardCountdownIntervalId = setInterval(() => { timeLeft--; bossRewardTimerDisplay.textContent = `关闭倒计时: ${timeLeft}s`; if (timeLeft <= 0) closeBossRewardModal(); }, 1000);
+            if (bossRewardTimeoutId) clearTimeout(bossRewardTimeoutId); bossRewardTimeoutId = setTimeout(closeBossRewardModal, 6000);
+        }
+
+        function closeBossRewardModal() {
+            bossRewardModalActive = false; bossRewardModal.style.display = 'none';
+            if (bossRewardCountdownIntervalId) clearInterval(bossRewardCountdownIntervalId); if (bossRewardTimeoutId) clearTimeout(bossRewardTimeoutId);
+            if (gameRunning && animationFrameId === null) animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function checkLevelUp() { 
+            if (!player || !gameRunning) return;
+            const xpNeeded = getXpNeededForLevel(player.level);
+            if (player.xp >= xpNeeded) { 
+                player.level++; 
+                player.xp -= xpNeeded;  // Subtract only the amount needed for that level
+                presentSkillSelection(); 
+            }
+        }
+
+        function presentSkillSelection() {
+            if (skillSelectionActive || bossRewardModalActive || !player || !gameRunning) return; 
+            skillSelectionActive = true; skillOptionsContainer.innerHTML = ''; 
+            const availableChoices = ALL_SKILLS.filter(skill => { const currentStacks = player.learnedSkills[skill.id] || 0; if (skill.maxStacks !== undefined && currentStacks >= skill.maxStacks) return false; if (skill.prerequisite && !(player.learnedSkills[skill.prerequisite] > 0)) return false; return true; });
+            availableChoices.sort((a, b) => { const categoryAIndex = SKILL_CATEGORY_ORDER.indexOf(a.category); const categoryBIndex = SKILL_CATEGORY_ORDER.indexOf(b.category); if (categoryAIndex !== categoryBIndex) return categoryAIndex - categoryBIndex; return a.name.localeCompare(b.name, 'zh-CN'); });
+            const chosenSkills = []; let tempAvailable = [...availableChoices];
+            while(chosenSkills.length < 3 && tempAvailable.length > 0) { const randomIndex = Math.floor(Math.random() * tempAvailable.length); chosenSkills.push(tempAvailable.splice(randomIndex, 1)[0]); }
+            if (chosenSkills.length === 0) { skillSelectionActive = false; if (gameRunning && animationFrameId === null) { animationFrameId = requestAnimationFrame(gameLoop); } return; } 
+            chosenSkills.forEach(skill => { const button = document.createElement('button'); button.className = 'skill-option-btn'; button.textContent = `${skill.name} - ${skill.description}`; button.onclick = () => selectSkill(skill); skillOptionsContainer.appendChild(button); });
+            skillModal.style.display = 'block'; let timeLeft = 6; skillTimerDisplay.textContent = `剩余时间: ${timeLeft}s`;
+            if (skillSelectionCountdownIntervalId) clearInterval(skillSelectionCountdownIntervalId);
+            skillSelectionCountdownIntervalId = setInterval(() => { timeLeft--; skillTimerDisplay.textContent = `剩余时间: ${timeLeft}s`; if (timeLeft <= 0) { clearInterval(skillSelectionCountdownIntervalId); const randomSkillIndex = Math.floor(Math.random() * chosenSkills.length); selectSkill(chosenSkills[randomSkillIndex]); } }, 1000);
+        }
+
+        function selectSkill(skill) { 
+            if (!skillSelectionActive || !player) return; 
+            skill.apply(player); player.learnedSkills[skill.id] = (player.learnedSkills[skill.id] || 0) + 1; 
+            skillModal.style.display = 'none'; skillSelectionActive = false; 
+            if (skillSelectionCountdownIntervalId) clearInterval(skillSelectionCountdownIntervalId); 
+            updateUI(); if (gameRunning && animationFrameId === null) animationFrameId = requestAnimationFrame(gameLoop);
+        }
+        
+        function toggleSkillBook() { 
+            skillBookOpen = !skillBookOpen; 
+            if (skillBookOpen) { renderSkillBook(); skillBookModal.style.display = 'block'; } 
+            else { skillBookModal.style.display = 'none'; if (gameRunning && animationFrameId === null) animationFrameId = requestAnimationFrame(gameLoop); }
+        }
+
+        function renderSkillBook() {
+            if (!player) return; skillBookContent.innerHTML = '';
+            const sortedSkills = [...ALL_SKILLS].sort((a, b) => { const categoryAIndex = SKILL_CATEGORY_ORDER.indexOf(a.category); const categoryBIndex = SKILL_CATEGORY_ORDER.indexOf(b.category); if (categoryAIndex !== categoryBIndex) return categoryAIndex - categoryBIndex; return a.name.localeCompare(b.name, 'zh-CN'); });
+            sortedSkills.forEach(skill => { const level = player.learnedSkills[skill.id] || 0; const entryDiv = document.createElement('div'); entryDiv.className = 'skill-entry' + (level > 0 ? ' learned' : ''); let skillTitle = `<h4>${skill.name}`; if (level > 0) skillTitle += ` <span class="skill-level">(等级 ${level})</span>`; if (skill.maxStacks !== undefined) skillTitle += ` (最大 ${skill.maxStacks}级)`; skillTitle += `</h4>`; entryDiv.innerHTML = `${skillTitle}<p>${skill.description}</p>`; skillBookContent.appendChild(entryDiv); });
+        }
+
+        function gameOver() { 
+            gameRunning = false; finalWaveDisplay.textContent = wave; finalScoreDisplay.textContent = score; 
+            gameOverScreen.style.display = 'block'; 
+        }
+        
+        function drawSingleBackground(bgImage, alpha = 1) {
+            if (bgImage && bgImage.complete && bgImage.naturalHeight !== 0) {
+                ctx.globalAlpha = alpha;
+                const canvasAspect = canvas.width / canvas.height;
+                const imgAspect = bgImage.naturalWidth / bgImage.naturalHeight;
+                let drawWidth, drawHeight, drawX, drawY;
+
+                if (canvasAspect > imgAspect) { 
+                    drawWidth = canvas.width;
+                    drawHeight = canvas.width / imgAspect;
+                    drawX = 0;
+                    drawY = (canvas.height - drawHeight) / 2;
+                } else { 
+                    drawHeight = canvas.height;
+                    drawWidth = canvas.height * imgAspect;
+                    drawY = 0;
+                    drawX = (canvas.width - drawWidth) / 2;
+                }
+                ctx.drawImage(bgImage, drawX, drawY, drawWidth, drawHeight);
+                ctx.globalAlpha = 1; 
+            } else if (alpha === 1) { 
+                ctx.fillStyle = '#333745'; 
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        function drawGameBackground() {
+            if (crossfadeProgress < 1 && oldBackgroundImage && backgroundImage && oldBackgroundImage !== backgroundImage) {
+                drawSingleBackground(oldBackgroundImage, 1 - crossfadeProgress);
+                drawSingleBackground(backgroundImage, crossfadeProgress);
+            } else {
+                drawSingleBackground(backgroundImage); 
+                if (oldBackgroundImage && crossfadeProgress >= 1) {
+                    oldBackgroundImage = null; 
+                }
+            }
+        }
+
+
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastLoopTimestamp;
+            lastLoopTimestamp = timestamp;
+
+            if (!gameRunning && !skillBookOpen && !bossRewardModalActive) { if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; } return; }
+            
+            if (crossfadeProgress < 1 && oldBackgroundImage) {
+                crossfadeProgress += (deltaTime / crossfadeDuration);
+                crossfadeProgress = Math.min(1, crossfadeProgress);
+                 if (crossfadeProgress >= 1) {
+                    oldBackgroundImage = null; 
+                }
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGameBackground();
+
+            if (gameRunning && !skillSelectionActive && !skillBookOpen && !bossRewardModalActive) { 
+                updatePlayer(timestamp); 
+                updateSlimes(timestamp); 
+                updateEnergyWaves(); 
+                if (currentBoss && currentBoss.hp > 0) updateBoss(); else if (!currentBoss) updateZombies(); 
+                updateBullets(); 
+            }
+            
+            drawPlayer(); 
+            drawSlimes(); 
+            drawEnergyWaves(); 
+            if (currentBoss && currentBoss.hp > 0) drawBoss(); else if (!currentBoss) drawZombies(); 
+            drawBullets();
+            
+            if (gameRunning && !skillSelectionActive && !skillBookOpen && !bossRewardModalActive) {
+                if ((!currentBoss || currentBoss.hp <= 0) && zombies.length === 0) {
+                    advanceWave();
+                }
+            }
+            
+            if (gameRunning || skillBookOpen || bossRewardModalActive) animationFrameId = requestAnimationFrame(gameLoop);
+            else { if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }}
+        }
+        
+        window.onload = () => { 
+            const savedAutoBg = localStorage.getItem('zombieSiegeAutoBg');
+            if (savedAutoBg !== null) {
+                autoChangeBackground = JSON.parse(savedAutoBg);
+            }
+            toggleBgBtn.textContent = `更换背景: ${autoChangeBackground ? '开' : '关'}`;
+            initGame(); 
+        };
+    </script>
+</body>
+</html>
