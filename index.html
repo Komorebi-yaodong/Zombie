@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombie Siege AI Edition - Extreme Late Game Difficulty</title>
+    <title>Zombie Siege AI Edition - XP Cap & Enhanced Late Game Difficulty</title>
     <style>
         body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; margin: 0; padding-top: 10px; background-color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ecf0f1; overflow: hidden; }
         #gameCanvas { border: 1px solid #7f8c8d; margin-bottom: 10px; }
@@ -155,12 +155,8 @@
 
         const INITIAL_BULLET_DAMAGE = 10; const PLAYER_SHOOT_COOLDOWN = 800; const INTER_BULLET_DELAY = 80;
         let lastShotTime = 0; let timeOfLastBurstBullet = 0;
+        const XP_PER_LEVEL = [0, 75, 175, 300, 450, 625, 825, 1050, 1300, 1575, 1875, 2200, 2550, 2925, 3325, 3750]; 
         
-        const XP_BASE_LEVEL_UP_UNTIL = 30; // Levels up to this use the array
-        const XP_PER_LEVEL = [0, 75, 175, 300, 450, 625, 825, 1050, 1300, 1575, 1875, 2200, 2550, 2925, 3325, 3750, 4200, 4675, 5175, 5700, 6250, 6825, 7425, 8050, 8700, 9375, 10075, 10800, 11550, 12325, 13125]; // XP for levels 1 to 30
-        const XP_POST_BASE_MULTIPLIER = 1.12; // Each level after XP_BASE_LEVEL_UP_UNTIL needs 12% more XP than the last
-        const XP_POST_BASE_FLAT_INCREASE = 500; // Also add a flat increase
-
         const ZOMBIE_TYPES = { normal: { hp: 20, speed: 0.25, damage: 5, xp: 10, color: '#27ae60', size: 15 }, fast:   { hp: 15, speed: 0.5, damage: 3, xp: 15, color: '#f1c40f', size: 12 }, tank:   { hp: 50, speed: 0.15, damage: 10, xp: 30, color: '#c0392b', size: 20 }};
         const BOSS_STATS = { 
             id: "the_boss_id", 
@@ -178,7 +174,7 @@
         const ALL_SKILLS = [
             { id: 'hp_boost', name: '生命强化', description: '最大生命值增加50, 并回复50点生命', category: 'player', apply: (p) => { p.maxHp += 50; p.hp = Math.min(p.hp + 50, p.maxHp); } },
             { id: 'life_heal_over_time', name: '生命治愈', description: '每5秒回复1点生命', category: 'player', apply: (p) => { p.hpRegenPer5Sec += 1; } },
-            { id: 'xp_gain_boost', name: '经验加速', description: '获取经验值增加20%', category: 'player', apply: (p) => { p.xpGainMultiplier += 0.20; } },
+            { id: 'xp_gain_boost', name: '经验加速', description: '获取经验值增加20% (最高200%)', category: 'player', apply: (p) => { p.xpGainMultiplier = Math.min(p.xpGainMultiplier + 0.20, 2.0); } },
             { id: 'damage_boost_flat', name: '主子弹强化 (固定)', description: '主子弹固定伤害增加5点', category: 'bullet', apply: (p) => { p.bulletFlatDamageBonus += 5; } },
             { id: 'damage_boost_percent', name: '主子弹强化 (百分比)', description: '当前主子弹伤害增加60%', category: 'bullet', apply: (p) => { p.bulletDamageMultiplier += 0.6; } },
             { id: 'projectile_increase', name: '弹道增加', description: '增加一个弹道，但主子弹伤害减少15%', category: 'bullet', apply: (p) => { p.projectileCount++; p.bulletDamageMultiplier -= 0.15; } },
@@ -340,6 +336,7 @@
 
         function saveGame() {
             if (!player) { alert("游戏尚未开始，无法保存。"); return; }
+            player.xpGainMultiplier = Math.min(player.xpGainMultiplier, 2.0); // Ensure cap before saving
             const saveData = { player: JSON.parse(JSON.stringify(player)), zombies: JSON.parse(JSON.stringify(zombies)), bullets: bullets.map(bullet => ({ ...bullet, hitTargets: bullet.hitTargets ? Array.from(bullet.hitTargets) : [] })), energyWaves: energyWaves.map(ew => ({ ...ew, hitZombies: Array.from(ew.hitZombies) })), currentBoss: currentBoss ? JSON.parse(JSON.stringify(currentBoss)) : null, wave, score, nextUniqueId, lastShotTime, timeOfLastBurstBullet };
             try { 
                 localStorage.setItem('zombieSiegeSaveData', JSON.stringify(saveData)); 
@@ -370,6 +367,8 @@
                 player.initialBulletDamage = typeof player.initialBulletDamage === 'number' ? player.initialBulletDamage : INITIAL_BULLET_DAMAGE; player.bulletFlatDamageBonus = typeof player.bulletFlatDamageBonus === 'number' ? player.bulletFlatDamageBonus : 0; player.bulletDamageMultiplier = typeof player.bulletDamageMultiplier === 'number' ? player.bulletDamageMultiplier : 0; player.projectileCount = typeof player.projectileCount === 'number' ? player.projectileCount : 1; player.bulletsPerShot = typeof player.bulletsPerShot === 'number' ? player.bulletsPerShot : 1; player.shootCooldown = typeof player.shootCooldown === 'number' ? player.shootCooldown : PLAYER_SHOOT_COOLDOWN;
                 player.slimeBaseDamage = typeof player.slimeBaseDamage === 'number' ? player.slimeBaseDamage : 20; player.slimeDamagePercentMultiplier = typeof player.slimeDamagePercentMultiplier === 'number' ? player.slimeDamagePercentMultiplier : 0; player.slimeSpeedMultiplier = typeof player.slimeSpeedMultiplier === 'number' ? player.slimeSpeedMultiplier : 1; player.hasEnergyWave = typeof player.hasEnergyWave === 'boolean' ? player.hasEnergyWave : false; player.energyWaveBaseDamage = typeof player.energyWaveBaseDamage === 'number' ? player.energyWaveBaseDamage : 20; player.energyWaveDamageMultiplier = typeof player.energyWaveDamageMultiplier === 'number' ? player.energyWaveDamageMultiplier : 0; player.energyWaveCooldown = typeof player.energyWaveCooldown === 'number' ? player.energyWaveCooldown : 30000;
                 
+                player.xpGainMultiplier = Math.min(player.xpGainMultiplier || 1, 2.0); // Apply cap on load
+
                 if (currentBoss) { 
                     currentBoss.speed = currentBoss.speed || BOSS_STATS.speed;
                     currentBoss.pathTargetX = currentBoss.pathTargetX || 0;
@@ -392,28 +391,11 @@
         function calculateSlimeDamage() { return parseFloat(Math.max(player.slimeBaseDamage * (1 + player.slimeDamagePercentMultiplier), player.slimeBaseDamage * 0.2).toFixed(1)); }
         function calculateEnergyWaveDamage() { return parseFloat(Math.max(player.energyWaveBaseDamage * (1 + player.energyWaveDamageMultiplier), player.energyWaveBaseDamage * 0.2).toFixed(1));}
         
-        function getXpNeededForLevel(level) {
-            if (level <= 0) return 0;
-            if (level <= XP_BASE_LEVEL_UP_UNTIL) {
-                return XP_PER_LEVEL[level] || XP_PER_LEVEL[XP_PER_LEVEL.length -1]; // XP_PER_LEVEL[0] is for level 1
-            } else {
-                // Calculate XP for levels beyond the array
-                let xpNeeded = XP_PER_LEVEL[XP_PER_LEVEL.length - 1];
-                for (let i = XP_BASE_LEVEL_UP_UNTIL + 1; i <= level; i++) {
-                    xpNeeded = Math.floor(xpNeeded * XP_POST_BASE_MULTIPLIER) + XP_POST_BASE_FLAT_INCREASE * (i - XP_BASE_LEVEL_UP_UNTIL);
-                }
-                return xpNeeded;
-            }
-        }
-
-
         function updateUI() {
             if (!player) return;
             playerHpDisplay.textContent = Math.max(0, Math.ceil(player.hp)); playerMaxHpDisplay.textContent = player.maxHp; playerHpBar.style.width = `${(Math.max(0, player.hp) / player.maxHp) * 100}%`;
-            
-            const xpNeeded = getXpNeededForLevel(player.level);
-
-            playerXpDisplay.textContent = player.xp; xpToLevelUpDisplay.textContent = xpNeeded; playerLevelDisplay.textContent = player.level; playerXpBar.style.width = xpNeeded === Infinity || xpNeeded === 0 ? '100%' : `${(player.xp / xpNeeded) * 100}%`;
+            const xpNeeded = (player.level < XP_PER_LEVEL.length) ? XP_PER_LEVEL[player.level] : XP_PER_LEVEL[XP_PER_LEVEL.length - 1] + (player.level - (XP_PER_LEVEL.length - 1)) * 400;
+            playerXpDisplay.textContent = player.xp; xpToLevelUpDisplay.textContent = xpNeeded; playerLevelDisplay.textContent = player.level; playerXpBar.style.width = xpNeeded === Infinity ? '100%' : `${(player.xp / xpNeeded) * 100}%`;
             bulletDamageDisplay.textContent = calculateBulletDamage(); projectileCountDisplay.textContent = player.projectileCount; bulletsPerShotDisplay.textContent = player.bulletsPerShot; bulletPierceCountDisplay.textContent = player.bulletPierceCount;
             hpRegenPer5SecDisplay.textContent = player.hpRegenPer5Sec; xpGainMultiplierDisplay.textContent = `${(player.xpGainMultiplier * 100).toFixed(0)}%`;
             slimeCountDisplay.textContent = player.slimes.length; slimeDamageDisplay.textContent = calculateSlimeDamage(); slimeSpeedMultiplierDisplay.textContent = `${(player.slimeSpeedMultiplier * 100).toFixed(0)}%`;
@@ -431,22 +413,13 @@
                 for (const typeKey in ZOMBIE_TYPES) {
                     const baseZombie = ZOMBIE_TYPES[typeKey]; let currentHp, currentDamage, currentSpeed;
                     let waveHpFactor = 0.1; let waveDmgFactor = 1; let waveSpeedFactor = 0.003;
-                    let exponentialHpFactor = 1; let exponentialDmgFactor = 1;
-
-                    if (wave > 100) { 
-                        waveHpFactor = 0.25; // Increased base scaling
-                        waveDmgFactor = 2.0;   // Increased base scaling
-                        waveSpeedFactor = 0.006; // Increased base scaling
-                        // Apply exponential scaling for waves far past 100
-                        exponentialHpFactor = Math.pow(1.007, Math.max(0, wave - 100)); // 0.7% HP increase per wave after 100
-                        exponentialDmgFactor = Math.pow(1.005, Math.max(0, wave - 100)); // 0.5% Dmg increase per wave after 100
-                    }
+                    if (wave > 100) { waveHpFactor = 0.25; waveDmgFactor = 2.0; waveSpeedFactor = 0.0055; } // Increased scaling past wave 100
 
                     if (wave > 0) { 
-                        const waveHpBonus = Math.floor(wave / 2) * (baseZombie.hp * waveHpFactor); // Faster HP scaling interval
-                        const waveDmgBonus = Math.floor(wave / 3) * waveDmgFactor; // Faster Dmg scaling interval
-                        currentHp = (baseZombie.hp + waveHpBonus) * exponentialHpFactor; 
-                        currentDamage = (baseZombie.damage + waveDmgBonus) * exponentialDmgFactor; 
+                        const waveHpBonus = Math.floor(wave / 3) * (baseZombie.hp * waveHpFactor); 
+                        const waveDmgBonus = Math.floor(wave / 5) * waveDmgFactor; 
+                        currentHp = baseZombie.hp + waveHpBonus; 
+                        currentDamage = baseZombie.damage + waveDmgBonus; 
                         currentSpeed = baseZombie.speed * (1 + wave * waveSpeedFactor); 
                     } else { currentHp = baseZombie.hp; currentDamage = baseZombie.damage; currentSpeed = baseZombie.speed; }
 
@@ -479,9 +452,7 @@
                 let numZombiesBase = 5;
                 let numZombiesPerWave = 2;
                 if (wave > 100) {
-                    numZombiesPerWave = 4; // Significantly more zombies
-                } else if (wave > 50) {
-                    numZombiesPerWave = 3;
+                    numZombiesPerWave = 4; // More zombies per wave after 100
                 }
                 const numZombies = numZombiesBase + wave * numZombiesPerWave; 
                 for (let i = 0; i < numZombies; i++) spawnZombie(); 
@@ -504,25 +475,13 @@
             const type = ZOMBIE_TYPES[typeKey];
             
             let waveHpFactor = 0.1; let waveDmgFactor = 1; let waveSpeedFactor = 0.003;
-            let exponentialHpFactor = 1; let exponentialDmgFactor = 1;
-
-            if (wave > 100) { 
-                waveHpFactor = 0.25; 
-                waveDmgFactor = 2.2;   
-                waveSpeedFactor = 0.0065; 
-                exponentialHpFactor = Math.pow(1.008, Math.max(0, wave - 100)); 
-                exponentialDmgFactor = Math.pow(1.006, Math.max(0, wave - 100));
-            } else if (wave > 50) {
-                waveHpFactor = 0.15; 
-                waveDmgFactor = 1.5;   
-                waveSpeedFactor = 0.004;
-            }
+            if (wave > 100) { waveHpFactor = 0.25; waveDmgFactor = 2.0; waveSpeedFactor = 0.0055; }
 
 
-            const waveHpBonus = Math.floor(wave / 2) * (type.hp * waveHpFactor); 
-            const waveDmgBonus = Math.floor(wave / 3) * waveDmgFactor; 
-            const currentHp = (type.hp + waveHpBonus) * exponentialHpFactor; 
-            const currentDamage = (type.damage + waveDmgBonus) * exponentialDmgFactor; 
+            const waveHpBonus = Math.floor(wave / 3) * (type.hp * waveHpFactor); 
+            const waveDmgBonus = Math.floor(wave / 5) * waveDmgFactor; 
+            const currentHp = type.hp + waveHpBonus; 
+            const currentDamage = type.damage + waveDmgBonus; 
             const currentSpeed = type.speed * (1 + wave * waveSpeedFactor); 
             
             zombies.push({ id: nextUniqueId++, x, y, hp: currentHp, maxHp: currentHp, speed: currentSpeed, damage: currentDamage, xp: type.xp, color: type.color, size: type.size, type: typeKey });
@@ -547,11 +506,8 @@
                     boss.pathTargetX = boss.spiralCenterX - halfDim;
                     boss.pathTargetY = boss.spiralCenterY - halfDim;
                     let shrinkMultiplier = 1;
-                    let pathShrinkBase = BOSS_STATS.pathShrinkAmount;
-                    if (wave > 100) { shrinkMultiplier = 1.35; pathShrinkBase = BOSS_STATS.pathShrinkAmount * 1.2; } 
-                    else if (wave > 50) { shrinkMultiplier = 1.15; }
-                    
-                    boss.currentPathDimension -= (pathShrinkBase * shrinkMultiplier) * (1 + (Math.floor(wave / 10) -1) * 0.1) ; 
+                    if (wave > 100) shrinkMultiplier = 1.35; 
+                    boss.currentPathDimension -= (BOSS_STATS.pathShrinkAmount * shrinkMultiplier) * (1 + (Math.floor(wave / 10) -1) * 0.1) ; 
                     boss.currentPathDimension = Math.max(boss.size * 2, boss.currentPathDimension); 
                     break;
             }
@@ -563,17 +519,7 @@
             const bossLevelMultiplier = Math.max(0, Math.floor(wave / 10) - 1); 
             let bossSpeedMultiplier = 1;
             let bossHpMultiplier = 0.75;
-            let bossXpMultiplier = 0.5;
-
-            if (wave > 100) { 
-                bossSpeedMultiplier = 1.4; 
-                bossHpMultiplier = 1.2; 
-                bossXpMultiplier = 0.7;
-            } else if (wave > 50) {
-                bossSpeedMultiplier = 1.15;
-                bossHpMultiplier = 0.9;
-                bossXpMultiplier = 0.6;
-            }
+            if (wave > 100) { bossSpeedMultiplier = 1.4; bossHpMultiplier = 1.25; }
 
 
             const bossSpeed = BOSS_STATS.speed * (1 + bossLevelMultiplier * 0.1 * bossSpeedMultiplier) ;
@@ -588,7 +534,7 @@
                 color: BOSS_STATS.color,
                 size: BOSS_STATS.size,
                 damage: BOSS_STATS.damage,
-                xp: BOSS_STATS.xp * (1 + bossLevelMultiplier * bossXpMultiplier),
+                xp: BOSS_STATS.xp * (1 + bossLevelMultiplier * 0.5),
                 speed: bossSpeed,
                 pathSegment: 0, 
                 currentPathDimension: initialDim,
@@ -864,12 +810,8 @@
 
         function checkLevelUp() { 
             if (!player || !gameRunning) return;
-            const xpNeeded = getXpNeededForLevel(player.level);
-            if (player.xp >= xpNeeded) { 
-                player.level++; 
-                player.xp -= xpNeeded;  // Subtract only the amount needed for that level
-                presentSkillSelection(); 
-            }
+            const currentLevelXpNeeded = (player.level < XP_PER_LEVEL.length) ? XP_PER_LEVEL[player.level] : XP_PER_LEVEL[XP_PER_LEVEL.length - 1] + (player.level - (XP_PER_LEVEL.length - 1)) * 400;
+            if (player.xp >= currentLevelXpNeeded) { player.level++; player.xp -= currentLevelXpNeeded; presentSkillSelection(); }
         }
 
         function presentSkillSelection() {
