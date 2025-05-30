@@ -6,27 +6,30 @@
     <title>Zombie Siege AI Edition - XP Cap & Enhanced Late Game Difficulty</title>
     <style>
         body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
             min-height: 100vh;
             margin: 0;
-            padding: 10px 0; /* Padding for top/bottom of page */
+            padding: 10px 0;
             background-color: #2c3e50;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: #ecf0f1;
-            overflow-y: auto; /* Allow whole page to scroll */
+            overflow-y: auto;
             box-sizing: border-box;
+        }
+
+        #main-content-wrapper {
+            width: 100%;
+            max-width: 800px; /* Or your desired max game width */
+            margin: 0 auto; /* Centers the wrapper */
         }
 
         .ui-container {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            width: 100%; /* Take full width of its constraint */
-            max-width: 800px; /* Match base canvas width */
-            margin: 0 auto 5px auto; /* Centered */
-            padding: 10px 0;
+            /* width: 100%; Inherits from wrapper */
+            /* max-width: 800px; Controlled by wrapper */
+            margin-bottom: 5px; /* Spacing between UI and canvas container */
+            padding: 10px 0; /* Internal padding for ui-container */
             font-size: 14px;
         }
          .ui-container::-webkit-scrollbar {
@@ -45,15 +48,14 @@
         }
 
         #gameCanvasContainer {
-            width: 100%;
-            max-width: 800px; /* Base width of the game */
-            margin: 0 auto; /* Centered */
+            /* width: 100%; Inherits from wrapper */
+            /* max-width: 800px; Controlled by wrapper */
+            /* margin: 0 auto; No longer needed for horizontal centering, wrapper does it */
             position: relative;
-            /* Aspect ratio 600/800 = 0.75. So, padding-top is 75% of width */
             padding-top: 75%;
             border: 1px solid #7f8c8d;
             box-sizing: border-box;
-            background-color: #333745; /* Fallback background for canvas area */
+            background-color: #333745;
         }
 
         #gameCanvas {
@@ -62,7 +64,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            display: block; /* Prevents extra space below canvas */
+            display: block;
         }
 
         .stats-left, .stats-middle, .stats-right {
@@ -185,70 +187,73 @@
         <button class="new-game-btn" onclick="startNewGame()">开始新游戏</button>
     </div>
 
-    <div class="ui-container">
-        <div class="stats-left">
-            <div class="collapsible-panel-header" data-panel-id="statsLeftPanel">
-                <span class="collapsible-panel-title">玩家状态</span>
-                <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
+    <div id="main-content-wrapper">
+        <div class="ui-container">
+            <div class="stats-left">
+                <div class="collapsible-panel-header" data-panel-id="statsLeftPanel">
+                    <span class="collapsible-panel-title">玩家状态</span>
+                    <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
+                </div>
+                <div class="collapsible-panel-content">
+                    <p>生命值: <span id="playerHp">100</span> / <span id="playerMaxHp">100</span></p>
+                    <div class="progress-bar-container"><div class="progress-bar" id="playerHpBar" style="width: 100%;"></div></div>
+                    <p>经验值: <span id="playerXp">0</span> / <span id="xpToLevelUp">100</span> (等级 <span id="playerLevel">1</span>)</p>
+                    <div class="progress-bar-container"><div class="progress-bar xp-bar" id="playerXpBar" style="width: 0%;"></div></div>
+                    <p>主子弹: 伤害 <span id="bulletDamageDisplay">10.0</span> | 弹道 <span id="projectileCountDisplay">1</span> | 每道 <span id="bulletsPerShotDisplay">1</span> | 穿透 <span id="bulletPierceCountDisplay">0</span></p>
+                    <p>史莱姆: 数量 <span id="slimeCountDisplay">0</span> | 伤害 <span id="slimeDamageDisplay">20.0</span> | 速度 <span id="slimeSpeedMultiplierDisplay">100%</span></p>
+                    <p>能量波: <span id="hasEnergyWaveDisplay">否</span> | 伤害 <span id="energyWaveDamageDisplay">20</span> | CD <span id="energyWaveCooldownDisplay">30</span>s</p>
+                    <p>每5秒生命回复: <span id="hpRegenPer5SecDisplay">0</span></p>
+                    <p>经验获取倍率: <span id="xpGainMultiplierDisplay">100%</span></p>
+                </div>
             </div>
-            <div class="collapsible-panel-content">
-                <p>生命值: <span id="playerHp">100</span> / <span id="playerMaxHp">100</span></p>
-                <div class="progress-bar-container"><div class="progress-bar" id="playerHpBar" style="width: 100%;"></div></div>
-                <p>经验值: <span id="playerXp">0</span> / <span id="xpToLevelUp">100</span> (等级 <span id="playerLevel">1</span>)</p>
-                <div class="progress-bar-container"><div class="progress-bar xp-bar" id="playerXpBar" style="width: 0%;"></div></div>
-                <p>主子弹: 伤害 <span id="bulletDamageDisplay">10.0</span> | 弹道 <span id="projectileCountDisplay">1</span> | 每道 <span id="bulletsPerShotDisplay">1</span> | 穿透 <span id="bulletPierceCountDisplay">0</span></p>
-                <p>史莱姆: 数量 <span id="slimeCountDisplay">0</span> | 伤害 <span id="slimeDamageDisplay">20.0</span> | 速度 <span id="slimeSpeedMultiplierDisplay">100%</span></p>
-                <p>能量波: <span id="hasEnergyWaveDisplay">否</span> | 伤害 <span id="energyWaveDamageDisplay">20</span> | CD <span id="energyWaveCooldownDisplay">30</span>s</p>
-                <p>每5秒生命回复: <span id="hpRegenPer5SecDisplay">0</span></p>
-                <p>经验获取倍率: <span id="xpGainMultiplierDisplay">100%</span></p>
+            <div class="stats-middle">
+                <div class="collapsible-panel-header" data-panel-id="statsMiddlePanel">
+                    <span class="collapsible-panel-title">敌人属性</span>
+                    <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
+                </div>
+                <div class="collapsible-panel-content">
+                    <p class="stats-title" id="middleStatsTitle">当前波数僵尸属性</p>
+                    <div class="zombie-type-stats-container">
+                        <span class="zombie-type-label">普通型:</span>
+                        <p>生命 <span id="zombieNormalHp">N/A</span> | 伤害 <span id="zombieNormalDamage">N/A</span> | 速度 <span id="zombieNormalSpeed">N/A</span></p>
+                    </div>
+                    <div class="zombie-type-stats-container">
+                        <span class="zombie-type-label">快速型:</span>
+                        <p>生命 <span id="zombieFastHp">N/A</span> | 伤害 <span id="zombieFastDamage">N/A</span> | 速度 <span id="zombieFastSpeed">N/A</span></p>
+                    </div>
+                    <div class="zombie-type-stats-container">
+                        <span class="zombie-type-label">坦克型:</span>
+                        <p>生命 <span id="zombieTankHp">N/A</span> | 伤害 <span id="zombieTankDamage">N/A</span> | 速度 <span id="zombieTankSpeed">N/A</span></p>
+                    </div>
+                    <div id="bossStatsDisplay" style="display:none;">
+                         <p>生命: <span id="bossHpDisplay">N/A</span> / <span id="bossMaxHpDisplay">N/A</span></p>
+                         <p>速度: <span id="bossSpeedDisplay">N/A</span></p>
+                    </div>
+                    <p class="stats-note" id="zombieStatsNote">(属性随波数提升)</p>
+                </div>
+            </div>
+            <div class="stats-right">
+                <div class="collapsible-panel-header" data-panel-id="statsRightPanel">
+                    <span class="collapsible-panel-title">游戏信息与控制</span>
+                    <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
+                </div>
+                <div class="collapsible-panel-content">
+                    <p>波数: <span id="waveCount">1</span></p>
+                    <p>分数: <span id="scoreCount">0</span></p>
+                    <div class="game-buttons">
+                        <button onclick="toggleSkillBook()">查看技能</button>
+                        <button onclick="saveGame()">保存游戏</button>
+                        <button id="toggleBgBtn" onclick="toggleAutoChangeBackground()">更换背景: 开</button>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="stats-middle">
-            <div class="collapsible-panel-header" data-panel-id="statsMiddlePanel">
-                <span class="collapsible-panel-title">敌人属性</span>
-                <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
-            </div>
-            <div class="collapsible-panel-content">
-                <p class="stats-title" id="middleStatsTitle">当前波数僵尸属性</p>
-                <div class="zombie-type-stats-container">
-                    <span class="zombie-type-label">普通型:</span>
-                    <p>生命 <span id="zombieNormalHp">N/A</span> | 伤害 <span id="zombieNormalDamage">N/A</span> | 速度 <span id="zombieNormalSpeed">N/A</span></p>
-                </div>
-                <div class="zombie-type-stats-container">
-                    <span class="zombie-type-label">快速型:</span>
-                    <p>生命 <span id="zombieFastHp">N/A</span> | 伤害 <span id="zombieFastDamage">N/A</span> | 速度 <span id="zombieFastSpeed">N/A</span></p>
-                </div>
-                <div class="zombie-type-stats-container">
-                    <span class="zombie-type-label">坦克型:</span>
-                    <p>生命 <span id="zombieTankHp">N/A</span> | 伤害 <span id="zombieTankDamage">N/A</span> | 速度 <span id="zombieTankSpeed">N/A</span></p>
-                </div>
-                <div id="bossStatsDisplay" style="display:none;">
-                     <p>生命: <span id="bossHpDisplay">N/A</span> / <span id="bossMaxHpDisplay">N/A</span></p>
-                     <p>速度: <span id="bossSpeedDisplay">N/A</span></p>
-                </div>
-                <p class="stats-note" id="zombieStatsNote">(属性随波数提升)</p>
-            </div>
-        </div>
-        <div class="stats-right">
-            <div class="collapsible-panel-header" data-panel-id="statsRightPanel">
-                <span class="collapsible-panel-title">游戏信息与控制</span>
-                <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
-            </div>
-            <div class="collapsible-panel-content">
-                <p>波数: <span id="waveCount">1</span></p>
-                <p>分数: <span id="scoreCount">0</span></p>
-                <div class="game-buttons">
-                    <button onclick="toggleSkillBook()">查看技能</button>
-                    <button onclick="saveGame()">保存游戏</button>
-                    <button id="toggleBgBtn" onclick="toggleAutoChangeBackground()">更换背景: 开</button>
-                </div>
-            </div>
+
+        <div id="gameCanvasContainer">
+            <canvas id="gameCanvas"></canvas>
         </div>
     </div>
 
-    <div id="gameCanvasContainer">
-        <canvas id="gameCanvas"></canvas>
-    </div>
 
     <div id="skillModal" class="modal"><h3>选择一个技能！</h3><div id="skillOptions"></div><p id="skillTimer">剩余时间: 6s</p></div>
     <div id="skillBookModal" class="modal"><h3>技能书</h3><div id="skillBookContent"></div><button class="close-btn" onclick="toggleSkillBook()">关闭</button></div>
@@ -398,13 +403,12 @@
             bossDie: 'sounds/boss_die.mp3',
             skillSelect: 'sounds/skill_select.mp3',
             energyWaveFire: 'sounds/energy_wave_fire.mp3',
-            slimeAttack: 'sounds/slime_attack.wav',
             buttonClick: 'sounds/button_click.mp3',
             skillAcquired: 'sounds/skill_acquired.mp3'
         };
         const soundEffectVolumes = {
             shoot: 0.15,
-            zombieDie: 0.3,
+            zombieDie: 0.2,
             playerHurt: 0.3,
             levelUp: 0.5,
             gameOver: 0.6,
@@ -841,10 +845,7 @@
             let bossSpeedMultiplierFactor = 0.12;
             let bossHpMultiplier = 1.0;
             if (wave > 100) {
-                bossHpMultiplier = 1.7;
-            }
-            if (wave > 150) {
-                bossHpMultiplier = 2.0;
+                bossHpMultiplier = 1.75;
             }
 
             let bossSpeed = BOSS_STATS.speed * (1 + bossLevelMultiplier * bossSpeedMultiplierFactor);
@@ -1284,7 +1285,6 @@
 
                     if (Math.hypot(slime.x - currentTarget.x, slime.y - currentTarget.y) < slime.size + currentTarget.size / 2) {
                         if (!slime.lastDamageApplicationTimes[currentTarget.id] || currentTime - slime.lastDamageApplicationTimes[currentTarget.id] > 1000) {
-                            playSound('slimeAttack');
                             currentTarget.hp -= slimeDamage;
                             slime.lastDamageApplicationTimes[currentTarget.id] = currentTime;
                             updateUI();
@@ -1530,16 +1530,16 @@
         function drawSingleBackground(bgImage, alpha = 1) {
             if (bgImage && bgImage.complete && bgImage.naturalHeight !== 0) {
                 ctx.globalAlpha = alpha;
-                const canvasAspect = BASE_CANVAS_WIDTH / BASE_CANVAS_HEIGHT; // Use base aspect for drawing decision
+                const canvasAspect = BASE_CANVAS_WIDTH / BASE_CANVAS_HEIGHT; 
                 const imgAspect = bgImage.naturalWidth / bgImage.naturalHeight;
                 let drawWidth, drawHeight, drawX, drawY;
 
-                if (canvasAspect > imgAspect) { // Canvas is wider than image (letterbox image)
+                if (canvasAspect > imgAspect) { 
                     drawWidth = BASE_CANVAS_WIDTH;
                     drawHeight = BASE_CANVAS_WIDTH / imgAspect;
                     drawX = 0;
                     drawY = (BASE_CANVAS_HEIGHT - drawHeight) / 2;
-                } else { // Canvas is taller than or same aspect as image (pillarbox image or fit)
+                } else { 
                     drawHeight = BASE_CANVAS_HEIGHT;
                     drawWidth = BASE_CANVAS_HEIGHT * imgAspect;
                     drawY = 0;
@@ -1547,7 +1547,7 @@
                 }
                 ctx.drawImage(bgImage, drawX, drawY, drawWidth, drawHeight);
                 ctx.globalAlpha = 1;
-            } else if (alpha === 1) { // Fallback fill for base dimensions
+            } else if (alpha === 1) { 
                 ctx.fillStyle = '#333745';
                 ctx.fillRect(0, 0, BASE_CANVAS_WIDTH, BASE_CANVAS_HEIGHT);
             }
@@ -1579,8 +1579,8 @@
                     oldBackgroundImage = null;
                 }
             }
-            
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear actual canvas
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const scaleX = canvas.width / BASE_CANVAS_WIDTH;
             const scaleY = canvas.height / BASE_CANVAS_HEIGHT;
@@ -1596,7 +1596,6 @@
             ctx.translate(offsetX, offsetY);
             ctx.scale(scale, scale);
 
-            // Now all drawing happens in the BASE_CANVAS_WIDTH x BASE_CANVAS_HEIGHT coordinate system
             drawGameBackground();
 
             if (gameRunning && !skillSelectionActive && !skillBookOpen && !bossRewardModalActive) {
@@ -1612,8 +1611,8 @@
             drawEnergyWaves();
             if (currentBoss && currentBoss.hp > 0) drawBoss(); else if (!currentBoss) drawZombies();
             drawBullets();
-            
-            ctx.restore(); // Restore transform
+
+            ctx.restore();
 
             if (gameRunning && !skillSelectionActive && !skillBookOpen && !bossRewardModalActive) {
                 if ((!currentBoss || currentBoss.hp <= 0) && zombies.length === 0) {
@@ -1688,12 +1687,13 @@
 
         function resizeCanvas() {
             const containerWidth = gameCanvasContainer.offsetWidth;
-            const containerHeight = gameCanvasContainer.clientHeight;
+            // The height is determined by padding-top to maintain aspect ratio for the container
+            // So, canvas.height should match container's computed height
+            const containerHeight = gameCanvasContainer.offsetHeight;
+
 
             canvas.width = containerWidth;
             canvas.height = containerHeight;
-            // No need to call updateUI() here specifically for resize,
-            // gameLoop will handle drawing with new scale.
         }
 
 
@@ -1725,7 +1725,7 @@
             initCollapsiblePanels();
 
             window.addEventListener('resize', resizeCanvas);
-            resizeCanvas(); // Initial resize
+            resizeCanvas(); 
             initGame();
         };
     </script>
