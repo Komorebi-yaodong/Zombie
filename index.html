@@ -5,14 +5,128 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zombie Siege AI Edition - XP Cap & Enhanced Late Game Difficulty</title>
     <style>
-        body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; margin: 0; padding-top: 10px; background-color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ecf0f1; overflow: hidden; }
-        #gameCanvas { border: 1px solid #7f8c8d; margin-bottom: 10px; }
-        .ui-container { display: flex; justify-content: space-between; align-items: flex-start; width: 800px; padding: 10px 0; font-size: 14px; margin-bottom: 5px; }
-        .stats-left, .stats-middle, .stats-right { background-color: rgba(44, 62, 80, 0.8); padding: 10px; border-radius: 5px; border: 1px solid #7f8c8d; }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px 0; /* Padding for top/bottom of page */
+            background-color: #2c3e50;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ecf0f1;
+            overflow-y: auto; /* Allow whole page to scroll */
+            box-sizing: border-box;
+        }
+
+        .ui-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%; /* Take full width of its constraint */
+            max-width: 800px; /* Match base canvas width */
+            margin: 0 auto 5px auto; /* Centered */
+            padding: 10px 0;
+            font-size: 14px;
+        }
+         .ui-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .ui-container::-webkit-scrollbar-track {
+            background: rgba(44, 62, 80, 0.3);
+            border-radius: 4px;
+        }
+        .ui-container::-webkit-scrollbar-thumb {
+            background: #7f8c8d;
+            border-radius: 4px;
+        }
+        .ui-container::-webkit-scrollbar-thumb:hover {
+            background: #95a5a6;
+        }
+
+        #gameCanvasContainer {
+            width: 100%;
+            max-width: 800px; /* Base width of the game */
+            margin: 0 auto; /* Centered */
+            position: relative;
+            /* Aspect ratio 600/800 = 0.75. So, padding-top is 75% of width */
+            padding-top: 75%;
+            border: 1px solid #7f8c8d;
+            box-sizing: border-box;
+            background-color: #333745; /* Fallback background for canvas area */
+        }
+
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block; /* Prevents extra space below canvas */
+        }
+
+        .stats-left, .stats-middle, .stats-right {
+            background-color: rgba(44, 62, 80, 0.8);
+            border-radius: 5px;
+            border: 1px solid #7f8c8d;
+            display: flex;
+            flex-direction: column;
+        }
         .stats-left { min-width: 320px; flex-shrink: 0; }
         .stats-middle { flex-grow: 1; text-align: left; margin: 0 10px;}
         .stats-right { text-align: right; min-width: 160px; flex-shrink: 0; }
+
+        .collapsible-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(127, 140, 141, 0.3);
+        }
+        .collapsible-panel-header.collapsed-state {
+            border-bottom: none;
+        }
+        .collapsible-panel-title {
+            font-weight: bold;
+            color: #ecf0f1;
+        }
+        .collapsible-panel-toggle-btn {
+            background: none;
+            border: 1px solid #7f8c8d;
+            color: #ecf0f1;
+            padding: 1px 7px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1.2;
+            margin-left: 10px;
+        }
+        .collapsible-panel-toggle-btn:hover {
+            background-color: rgba(127, 140, 141, 0.2);
+        }
+        .collapsible-panel-content {
+            padding: 10px;
+        }
+        .collapsible-panel-content.collapsed {
+            display: none;
+            padding: 0;
+        }
+
         .stats-left p, .stats-middle p, .stats-right p { margin: 4px 0; }
+        .collapsible-panel-content > p:first-child,
+        .collapsible-panel-content > .progress-bar-container:first-child,
+        .collapsible-panel-content > .stats-title:first-child {
+             margin-top: 0;
+        }
+         .collapsible-panel-content > *:first-child {
+            margin-top: 2px;
+        }
+        .collapsible-panel-content > *:last-child {
+            margin-bottom: 0;
+        }
+
+
         .progress-bar-container { width: 150px; height: 10px; background-color: #7f8c8d; border-radius: 5px; overflow: hidden; margin-top: 3px; }
         .progress-bar { height: 100%; background-color: #2ecc71; transition: width 0.2s ease-out; }
         .xp-bar { background-color: #3498db; }
@@ -73,47 +187,69 @@
 
     <div class="ui-container">
         <div class="stats-left">
-            <p>生命值: <span id="playerHp">100</span> / <span id="playerMaxHp">100</span></p>
-            <div class="progress-bar-container"><div class="progress-bar" id="playerHpBar" style="width: 100%;"></div></div>
-            <p>经验值: <span id="playerXp">0</span> / <span id="xpToLevelUp">100</span> (等级 <span id="playerLevel">1</span>)</p>
-            <div class="progress-bar-container"><div class="progress-bar xp-bar" id="playerXpBar" style="width: 0%;"></div></div>
-            <p>主子弹: 伤害 <span id="bulletDamageDisplay">10.0</span> | 弹道 <span id="projectileCountDisplay">1</span> | 每道 <span id="bulletsPerShotDisplay">1</span> | 穿透 <span id="bulletPierceCountDisplay">0</span></p>
-            <p>史莱姆: 数量 <span id="slimeCountDisplay">0</span> | 伤害 <span id="slimeDamageDisplay">20.0</span> | 速度 <span id="slimeSpeedMultiplierDisplay">100%</span></p>
-            <p>能量波: <span id="hasEnergyWaveDisplay">否</span> | 伤害 <span id="energyWaveDamageDisplay">20</span> | CD <span id="energyWaveCooldownDisplay">30</span>s</p>
-            <p>每5秒生命回复: <span id="hpRegenPer5SecDisplay">0</span></p>
-            <p>经验获取倍率: <span id="xpGainMultiplierDisplay">100%</span></p>
+            <div class="collapsible-panel-header" data-panel-id="statsLeftPanel">
+                <span class="collapsible-panel-title">玩家状态</span>
+                <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
+            </div>
+            <div class="collapsible-panel-content">
+                <p>生命值: <span id="playerHp">100</span> / <span id="playerMaxHp">100</span></p>
+                <div class="progress-bar-container"><div class="progress-bar" id="playerHpBar" style="width: 100%;"></div></div>
+                <p>经验值: <span id="playerXp">0</span> / <span id="xpToLevelUp">100</span> (等级 <span id="playerLevel">1</span>)</p>
+                <div class="progress-bar-container"><div class="progress-bar xp-bar" id="playerXpBar" style="width: 0%;"></div></div>
+                <p>主子弹: 伤害 <span id="bulletDamageDisplay">10.0</span> | 弹道 <span id="projectileCountDisplay">1</span> | 每道 <span id="bulletsPerShotDisplay">1</span> | 穿透 <span id="bulletPierceCountDisplay">0</span></p>
+                <p>史莱姆: 数量 <span id="slimeCountDisplay">0</span> | 伤害 <span id="slimeDamageDisplay">20.0</span> | 速度 <span id="slimeSpeedMultiplierDisplay">100%</span></p>
+                <p>能量波: <span id="hasEnergyWaveDisplay">否</span> | 伤害 <span id="energyWaveDamageDisplay">20</span> | CD <span id="energyWaveCooldownDisplay">30</span>s</p>
+                <p>每5秒生命回复: <span id="hpRegenPer5SecDisplay">0</span></p>
+                <p>经验获取倍率: <span id="xpGainMultiplierDisplay">100%</span></p>
+            </div>
         </div>
         <div class="stats-middle">
-            <p class="stats-title" id="middleStatsTitle">当前波数僵尸属性</p>
-            <div class="zombie-type-stats-container">
-                <span class="zombie-type-label">普通型:</span>
-                <p>生命 <span id="zombieNormalHp">N/A</span> | 伤害 <span id="zombieNormalDamage">N/A</span> | 速度 <span id="zombieNormalSpeed">N/A</span></p>
+            <div class="collapsible-panel-header" data-panel-id="statsMiddlePanel">
+                <span class="collapsible-panel-title">敌人属性</span>
+                <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
             </div>
-            <div class="zombie-type-stats-container">
-                <span class="zombie-type-label">快速型:</span>
-                <p>生命 <span id="zombieFastHp">N/A</span> | 伤害 <span id="zombieFastDamage">N/A</span> | 速度 <span id="zombieFastSpeed">N/A</span></p>
+            <div class="collapsible-panel-content">
+                <p class="stats-title" id="middleStatsTitle">当前波数僵尸属性</p>
+                <div class="zombie-type-stats-container">
+                    <span class="zombie-type-label">普通型:</span>
+                    <p>生命 <span id="zombieNormalHp">N/A</span> | 伤害 <span id="zombieNormalDamage">N/A</span> | 速度 <span id="zombieNormalSpeed">N/A</span></p>
+                </div>
+                <div class="zombie-type-stats-container">
+                    <span class="zombie-type-label">快速型:</span>
+                    <p>生命 <span id="zombieFastHp">N/A</span> | 伤害 <span id="zombieFastDamage">N/A</span> | 速度 <span id="zombieFastSpeed">N/A</span></p>
+                </div>
+                <div class="zombie-type-stats-container">
+                    <span class="zombie-type-label">坦克型:</span>
+                    <p>生命 <span id="zombieTankHp">N/A</span> | 伤害 <span id="zombieTankDamage">N/A</span> | 速度 <span id="zombieTankSpeed">N/A</span></p>
+                </div>
+                <div id="bossStatsDisplay" style="display:none;">
+                     <p>生命: <span id="bossHpDisplay">N/A</span> / <span id="bossMaxHpDisplay">N/A</span></p>
+                     <p>速度: <span id="bossSpeedDisplay">N/A</span></p>
+                </div>
+                <p class="stats-note" id="zombieStatsNote">(属性随波数提升)</p>
             </div>
-            <div class="zombie-type-stats-container">
-                <span class="zombie-type-label">坦克型:</span>
-                <p>生命 <span id="zombieTankHp">N/A</span> | 伤害 <span id="zombieTankDamage">N/A</span> | 速度 <span id="zombieTankSpeed">N/A</span></p>
-            </div>
-            <div id="bossStatsDisplay" style="display:none;">
-                 <p>生命: <span id="bossHpDisplay">N/A</span> / <span id="bossMaxHpDisplay">N/A</span></p>
-                 <p>速度: <span id="bossSpeedDisplay">N/A</span></p>
-            </div>
-            <p class="stats-note" id="zombieStatsNote">(属性随波数提升)</p>
         </div>
         <div class="stats-right">
-            <p>波数: <span id="waveCount">1</span></p>
-            <p>分数: <span id="scoreCount">0</span></p>
-            <div class="game-buttons">
-                <button onclick="toggleSkillBook()">查看技能</button>
-                <button onclick="saveGame()">保存游戏</button>
-                <button id="toggleBgBtn" onclick="toggleAutoChangeBackground()">更换背景: 开</button>
+            <div class="collapsible-panel-header" data-panel-id="statsRightPanel">
+                <span class="collapsible-panel-title">游戏信息与控制</span>
+                <button class="collapsible-panel-toggle-btn" aria-expanded="true">-</button>
+            </div>
+            <div class="collapsible-panel-content">
+                <p>波数: <span id="waveCount">1</span></p>
+                <p>分数: <span id="scoreCount">0</span></p>
+                <div class="game-buttons">
+                    <button onclick="toggleSkillBook()">查看技能</button>
+                    <button onclick="saveGame()">保存游戏</button>
+                    <button id="toggleBgBtn" onclick="toggleAutoChangeBackground()">更换背景: 开</button>
+                </div>
             </div>
         </div>
     </div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <div id="gameCanvasContainer">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
     <div id="skillModal" class="modal"><h3>选择一个技能！</h3><div id="skillOptions"></div><p id="skillTimer">剩余时间: 6s</p></div>
     <div id="skillBookModal" class="modal"><h3>技能书</h3><div id="skillBookContent"></div><button class="close-btn" onclick="toggleSkillBook()">关闭</button></div>
     <div id="gameOverScreen"><h2>游戏结束!</h2><p>最终波数: <span id="finalWave"></span></p><p>最终分数: <span id="finalScore"></span></p><button onclick="startNewGame(true)">重新开始</button></div>
@@ -126,6 +262,10 @@
 
     <script>
         const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
+        const gameCanvasContainer = document.getElementById('gameCanvasContainer');
+
+        const BASE_CANVAS_WIDTH = 800;
+        const BASE_CANVAS_HEIGHT = 600;
 
         const playerHpDisplay = document.getElementById('playerHp'); const playerMaxHpDisplay = document.getElementById('playerMaxHp'); const playerHpBar = document.getElementById('playerHpBar');
         const playerXpDisplay = document.getElementById('playerXp'); const xpToLevelUpDisplay = document.getElementById('xpToLevelUp'); const playerLevelDisplay = document.getElementById('playerLevel'); const playerXpBar = document.getElementById('playerXpBar');
@@ -293,11 +433,11 @@
                 audio.play().catch(e => {});
                 if (options.fadeOutDuration) {
                     setTimeout(() => {
-                        if (activeBossSpawnSound === audio) { // Make sure it's still the current one
+                        if (activeBossSpawnSound === audio) {
                            fadeOutAndStop(audio, options.fadeOutDuration);
-                           activeBossSpawnSound = null; // Clear reference after starting fade
+                           activeBossSpawnSound = null;
                         }
-                    }, (audio.duration * 1000 || 5000) - options.fadeOutDuration); // Start fade before end
+                    }, (audio.duration * 1000 || 5000) - options.fadeOutDuration);
                 }
             } else {
                 audio.play().catch(e => {});
@@ -329,7 +469,7 @@
             soundEnabled = !soundEnabled;
             toggleSoundBtn.textContent = `声音: ${soundEnabled ? '开' : '关'}`;
             localStorage.setItem('zombieSiegeSoundEnabled', soundEnabled);
-            if (!soundEnabled && activeBossSpawnSound) { // Stop boss sound if sound is disabled
+            if (!soundEnabled && activeBossSpawnSound) {
                 fadeOutAndStop(activeBossSpawnSound, 500);
                 activeBossSpawnSound = null;
             }
@@ -404,7 +544,7 @@
         function initializeNewGameVariables() {
             const now = performance.now();
             player = {
-                x: canvas.width / 2, y: canvas.height / 2, size: 20, color: '#3498db',
+                x: BASE_CANVAS_WIDTH / 2, y: BASE_CANVAS_HEIGHT / 2, size: 20, color: '#3498db',
                 hp: 100, maxHp: 100, xp: 0, level: 1,
                 initialBulletDamage: INITIAL_BULLET_DAMAGE, bulletFlatDamageBonus: 0, bulletDamageMultiplier: 0,
                 projectileCount: 1, bulletsPerShot: 1, shootCooldown: PLAYER_SHOOT_COOLDOWN,
@@ -551,7 +691,7 @@
                     currentBoss.pathTargetX = currentBoss.pathTargetX || 0;
                     currentBoss.pathTargetY = currentBoss.pathTargetY || 0;
                     currentBoss.pathSegment = currentBoss.pathSegment || 0;
-                    currentBoss.currentPathDimension = currentBoss.currentPathDimension || (Math.min(canvas.width, canvas.height) * BOSS_STATS.initialPathDimensionFactor);
+                    currentBoss.currentPathDimension = currentBoss.currentPathDimension || (Math.min(BASE_CANVAS_WIDTH, BASE_CANVAS_HEIGHT) * BOSS_STATS.initialPathDimensionFactor);
                     currentBoss.spiralCenterX = currentBoss.spiralCenterX || player.x;
                     currentBoss.spiralCenterY = currentBoss.spiralCenterY || player.y;
                 }
@@ -561,7 +701,7 @@
                     s.lastDamageApplicationTimes = s.lastDamageApplicationTimes || {};
                 });
                 return true;
-            } catch (e) { console.error("Load game error:", e); localStorage.removeItem('zombieSiegeSaveData'); return false; }
+            } catch (e) {  localStorage.removeItem('zombieSiegeSaveData'); return false; }
         }
 
         function calculateBulletDamage() { let baseDmg = player.initialBulletDamage + player.bulletFlatDamageBonus; let finalDmg = baseDmg * (1 + player.bulletDamageMultiplier); return parseFloat(Math.max(finalDmg, player.initialBulletDamage * 0.2).toFixed(1));}
@@ -641,12 +781,12 @@
 
         function spawnZombie() {
             let x, y; const edge = Math.floor(Math.random() * 4);
-            const spawnMargin = 30;
+            const spawnMargin = BASE_CANVAS_WIDTH * 0.0375;
 
-            if (edge === 0) { x = Math.random() * canvas.width; y = -spawnMargin; }
-            else if (edge === 1) { x = canvas.width + spawnMargin; y = Math.random() * canvas.height; }
-            else if (edge === 2) { x = Math.random() * canvas.width; y = canvas.height + spawnMargin; }
-            else { x = -spawnMargin; y = Math.random() * canvas.height; }
+            if (edge === 0) { x = Math.random() * BASE_CANVAS_WIDTH; y = -spawnMargin; }
+            else if (edge === 1) { x = BASE_CANVAS_WIDTH + spawnMargin; y = Math.random() * BASE_CANVAS_HEIGHT; }
+            else if (edge === 2) { x = Math.random() * BASE_CANVAS_WIDTH; y = BASE_CANVAS_HEIGHT + spawnMargin; }
+            else { x = -spawnMargin; y = Math.random() * BASE_CANVAS_HEIGHT; }
 
 
             let typeKey = 'normal'; const randType = Math.random();
@@ -690,8 +830,8 @@
                     boss.currentPathDimension = Math.max(boss.size * 2, boss.currentPathDimension);
                     break;
             }
-            boss.pathTargetX = Math.max(-boss.size * 2, Math.min(canvas.width + boss.size * 2, boss.pathTargetX));
-            boss.pathTargetY = Math.max(-boss.size * 2, Math.min(canvas.height + boss.size * 2, boss.pathTargetY));
+            boss.pathTargetX = Math.max(-boss.size * 2, Math.min(BASE_CANVAS_WIDTH + boss.size * 2, boss.pathTargetX));
+            boss.pathTargetY = Math.max(-boss.size * 2, Math.min(BASE_CANVAS_HEIGHT + boss.size * 2, boss.pathTargetY));
         }
 
         function spawnBoss() {
@@ -701,7 +841,10 @@
             let bossSpeedMultiplierFactor = 0.12;
             let bossHpMultiplier = 1.0;
             if (wave > 100) {
-                bossHpMultiplier = 1.75;
+                bossHpMultiplier = 1.7;
+            }
+            if (wave > 150) {
+                bossHpMultiplier = 2.0;
             }
 
             let bossSpeed = BOSS_STATS.speed * (1 + bossLevelMultiplier * bossSpeedMultiplierFactor);
@@ -709,7 +852,7 @@
                  bossSpeed *= 1.2;
             }
 
-            const initialDim = Math.min(canvas.width, canvas.height) * BOSS_STATS.initialPathDimensionFactor;
+            const initialDim = Math.min(BASE_CANVAS_WIDTH, BASE_CANVAS_HEIGHT) * BOSS_STATS.initialPathDimensionFactor;
 
             currentBoss = {
                 id: BOSS_STATS.id,
@@ -1081,8 +1224,8 @@
         function updatePlayer(currentTime) {
             if (skillSelectionActive || skillBookOpen || bossRewardModalActive || !player || !gameRunning) return;
 
-            player.x = Math.max(player.size / 2, Math.min(canvas.width - player.size / 2, player.x));
-            player.y = Math.max(player.size / 2, Math.min(canvas.height - player.size / 2, player.y));
+            player.x = Math.max(player.size / 2, Math.min(BASE_CANVAS_WIDTH - player.size / 2, player.x));
+            player.y = Math.max(player.size / 2, Math.min(BASE_CANVAS_HEIGHT - player.size / 2, player.y));
 
             if (player.hpRegenPer5Sec > 0 && currentTime - player.lastHpRegenTime > 5000) { player.hp = Math.min(player.hp + player.hpRegenPer5Sec, player.maxHp); player.lastHpRegenTime = currentTime; updateUI(); }
             if (player.currentBulletInBurst === 0 && currentTime - lastShotTime > player.shootCooldown) { fireOneSetOfBullets(currentTime); lastShotTime = currentTime; player.currentBulletInBurst = 1; }
@@ -1090,7 +1233,7 @@
             if (player.currentBulletInBurst >= player.bulletsPerShot) player.currentBulletInBurst = 0;
             if (player.hasEnergyWave && currentTime - player.lastEnergyWaveTime > player.energyWaveCooldown) {
                 playSound('energyWaveFire');
-                energyWaves.push({ x: player.x, y: player.y, radius: 10, maxRadius: Math.max(canvas.width, canvas.height) * 0.8, speed: 0.8, thickness: 3, color: 'rgba(255, 100, 0, 0.6)', damage: calculateEnergyWaveDamage(), hitZombies: new Set() }); player.lastEnergyWaveTime = currentTime;
+                energyWaves.push({ x: player.x, y: player.y, radius: 10, maxRadius: Math.max(BASE_CANVAS_WIDTH, BASE_CANVAS_HEIGHT) * 0.8, speed: 0.8, thickness: 3, color: 'rgba(255, 100, 0, 0.6)', damage: calculateEnergyWaveDamage(), hitZombies: new Set() }); player.lastEnergyWaveTime = currentTime;
             }
         }
 
@@ -1262,7 +1405,7 @@
             for (let i = bullets.length - 1; i >= 0; i--) {
                 const bullet = bullets[i]; bullet.x += bullet.dx; bullet.y += bullet.dy;
                 if (!bullet.hitTargets) bullet.hitTargets = new Set();
-                if (bullet.x < -50 || bullet.x > canvas.width + 50 || bullet.y < -50 || bullet.y > canvas.height + 50) {
+                if (bullet.x < -50 || bullet.x > BASE_CANVAS_WIDTH + 50 || bullet.y < -50 || bullet.y > BASE_CANVAS_HEIGHT + 50) {
                     bullets.splice(i, 1); continue;
                 }
                 let bulletRemovedThisIteration = false;
@@ -1288,7 +1431,7 @@
         function handleBossDefeat() {
             if (!currentBoss) return;
             playSound('bossDie');
-            if (activeBossSpawnSound) { // Stop any ongoing boss spawn sound
+            if (activeBossSpawnSound) {
                 fadeOutAndStop(activeBossSpawnSound, 500);
                 activeBossSpawnSound = null;
             }
@@ -1387,26 +1530,26 @@
         function drawSingleBackground(bgImage, alpha = 1) {
             if (bgImage && bgImage.complete && bgImage.naturalHeight !== 0) {
                 ctx.globalAlpha = alpha;
-                const canvasAspect = canvas.width / canvas.height;
+                const canvasAspect = BASE_CANVAS_WIDTH / BASE_CANVAS_HEIGHT; // Use base aspect for drawing decision
                 const imgAspect = bgImage.naturalWidth / bgImage.naturalHeight;
                 let drawWidth, drawHeight, drawX, drawY;
 
-                if (canvasAspect > imgAspect) {
-                    drawWidth = canvas.width;
-                    drawHeight = canvas.width / imgAspect;
+                if (canvasAspect > imgAspect) { // Canvas is wider than image (letterbox image)
+                    drawWidth = BASE_CANVAS_WIDTH;
+                    drawHeight = BASE_CANVAS_WIDTH / imgAspect;
                     drawX = 0;
-                    drawY = (canvas.height - drawHeight) / 2;
-                } else {
-                    drawHeight = canvas.height;
-                    drawWidth = canvas.height * imgAspect;
+                    drawY = (BASE_CANVAS_HEIGHT - drawHeight) / 2;
+                } else { // Canvas is taller than or same aspect as image (pillarbox image or fit)
+                    drawHeight = BASE_CANVAS_HEIGHT;
+                    drawWidth = BASE_CANVAS_HEIGHT * imgAspect;
                     drawY = 0;
-                    drawX = (canvas.width - drawWidth) / 2;
+                    drawX = (BASE_CANVAS_WIDTH - drawWidth) / 2;
                 }
                 ctx.drawImage(bgImage, drawX, drawY, drawWidth, drawHeight);
                 ctx.globalAlpha = 1;
-            } else if (alpha === 1) {
+            } else if (alpha === 1) { // Fallback fill for base dimensions
                 ctx.fillStyle = '#333745';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillRect(0, 0, BASE_CANVAS_WIDTH, BASE_CANVAS_HEIGHT);
             }
         }
 
@@ -1436,8 +1579,24 @@
                     oldBackgroundImage = null;
                 }
             }
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear actual canvas
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const scaleX = canvas.width / BASE_CANVAS_WIDTH;
+            const scaleY = canvas.height / BASE_CANVAS_HEIGHT;
+            const scale = Math.min(scaleX, scaleY);
+
+            const renderWidth = BASE_CANVAS_WIDTH * scale;
+            const renderHeight = BASE_CANVAS_HEIGHT * scale;
+
+            const offsetX = (canvas.width - renderWidth) / 2;
+            const offsetY = (canvas.height - renderHeight) / 2;
+
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+
+            // Now all drawing happens in the BASE_CANVAS_WIDTH x BASE_CANVAS_HEIGHT coordinate system
             drawGameBackground();
 
             if (gameRunning && !skillSelectionActive && !skillBookOpen && !bossRewardModalActive) {
@@ -1453,6 +1612,8 @@
             drawEnergyWaves();
             if (currentBoss && currentBoss.hp > 0) drawBoss(); else if (!currentBoss) drawZombies();
             drawBullets();
+            
+            ctx.restore(); // Restore transform
 
             if (gameRunning && !skillSelectionActive && !skillBookOpen && !bossRewardModalActive) {
                 if ((!currentBoss || currentBoss.hp <= 0) && zombies.length === 0) {
@@ -1463,6 +1624,78 @@
             if (gameRunning || skillBookOpen || bossRewardModalActive) animationFrameId = requestAnimationFrame(gameLoop);
             else { if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }}
         }
+
+        function initCollapsiblePanels() {
+            const panelHeaders = document.querySelectorAll('.collapsible-panel-header');
+            const panelStates = JSON.parse(localStorage.getItem('zombieSiegePanelStates')) || {};
+
+            panelHeaders.forEach(header => {
+                const panelId = header.dataset.panelId;
+                const content = header.nextElementSibling;
+                const btn = header.querySelector('.collapsible-panel-toggle-btn');
+
+                if (!content || !btn) {
+                    return;
+                }
+
+                let isInitiallyExpanded = true;
+                if (panelId && typeof panelStates[panelId] === 'boolean') {
+                    isInitiallyExpanded = panelStates[panelId];
+                }
+
+                if (!isInitiallyExpanded) {
+                    content.classList.add('collapsed');
+                    btn.textContent = '+';
+                    btn.setAttribute('aria-expanded', 'false');
+                    header.classList.add('collapsed-state');
+                } else {
+                    content.classList.remove('collapsed');
+                    btn.textContent = '-';
+                    btn.setAttribute('aria-expanded', 'true');
+                    header.classList.remove('collapsed-state');
+                }
+
+                header.addEventListener('click', function(event) {
+                    if (event.target === btn) return;
+                    btn.click();
+                });
+
+                btn.addEventListener('click', function(event) {
+                    event.stopPropagation();
+
+                    if (typeof playSound === 'function' && soundEffectPaths.buttonClick) {
+                         playSound('buttonClick');
+                    }
+
+                    content.classList.toggle('collapsed');
+                    const isExpanded = !content.classList.contains('collapsed');
+                    this.textContent = isExpanded ? '-' : '+';
+                    this.setAttribute('aria-expanded', isExpanded);
+
+                    if (isExpanded) {
+                        header.classList.remove('collapsed-state');
+                    } else {
+                        header.classList.add('collapsed-state');
+                    }
+
+                    if (panelId) {
+                        panelStates[panelId] = isExpanded;
+                        localStorage.setItem('zombieSiegePanelStates', JSON.stringify(panelStates));
+                    }
+                });
+            });
+        }
+
+        function resizeCanvas() {
+            const containerWidth = gameCanvasContainer.offsetWidth;
+            const containerHeight = gameCanvasContainer.clientHeight;
+
+            canvas.width = containerWidth;
+            canvas.height = containerHeight;
+            // No need to call updateUI() here specifically for resize,
+            // gameLoop will handle drawing with new scale.
+        }
+
 
         window.onload = () => {
             toggleSoundBtn = document.createElement('button');
@@ -1488,6 +1721,11 @@
             if(bgBtnElement) {
                  bgBtnElement.textContent = `更换背景: ${autoChangeBackground ? '开' : '关'}`;
             }
+
+            initCollapsiblePanels();
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas(); // Initial resize
             initGame();
         };
     </script>
