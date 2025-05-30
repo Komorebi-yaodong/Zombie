@@ -18,18 +18,16 @@
 
         #main-content-wrapper {
             width: 100%;
-            max-width: 800px; /* Or your desired max game width */
-            margin: 0 auto; /* Centers the wrapper */
+            max-width: 800px; 
+            margin: 0 auto; 
         }
 
         .ui-container {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            /* width: 100%; Inherits from wrapper */
-            /* max-width: 800px; Controlled by wrapper */
-            margin-bottom: 5px; /* Spacing between UI and canvas container */
-            padding: 10px 0; /* Internal padding for ui-container */
+            margin-bottom: 5px; 
+            padding: 10px 0; 
             font-size: 14px;
         }
          .ui-container::-webkit-scrollbar {
@@ -48,9 +46,6 @@
         }
 
         #gameCanvasContainer {
-            /* width: 100%; Inherits from wrapper */
-            /* max-width: 800px; Controlled by wrapper */
-            /* margin: 0 auto; No longer needed for horizontal centering, wrapper does it */
             position: relative;
             padding-top: 75%;
             border: 1px solid #7f8c8d;
@@ -403,12 +398,13 @@
             bossDie: 'sounds/boss_die.mp3',
             skillSelect: 'sounds/skill_select.mp3',
             energyWaveFire: 'sounds/energy_wave_fire.mp3',
+            slimeAttack: 'sounds/slime_attack.mp3',
             buttonClick: 'sounds/button_click.mp3',
             skillAcquired: 'sounds/skill_acquired.mp3'
         };
         const soundEffectVolumes = {
             shoot: 0.15,
-            zombieDie: 0.2,
+            zombieDie: 0.3,
             playerHurt: 0.3,
             levelUp: 0.5,
             gameOver: 0.6,
@@ -417,7 +413,7 @@
             bossDie: 0.3,
             skillSelect: 0.3,
             energyWaveFire: 0.3,
-            slimeAttack: 0.3,
+            slimeAttack: 0.5,
             buttonClick: 0.4,
             skillAcquired: 0.5
         };
@@ -609,8 +605,15 @@
         }
 
         function continueGame() {
+            if (activeBossSpawnSound) {
+                fadeOutAndStop(activeBossSpawnSound, 200); 
+                activeBossSpawnSound = null;
+            }
             playSound('buttonClick');
-            startGamePrompt.style.display = 'none'; if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            
+            startGamePrompt.style.display = 'none'; 
+            if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            
             const loaded = loadGame();
             if (loaded) {
                 if (player.hp <= 0) { updateUI(); gameOver(); return; }
@@ -1285,6 +1288,7 @@
 
                     if (Math.hypot(slime.x - currentTarget.x, slime.y - currentTarget.y) < slime.size + currentTarget.size / 2) {
                         if (!slime.lastDamageApplicationTimes[currentTarget.id] || currentTime - slime.lastDamageApplicationTimes[currentTarget.id] > 1000) {
+                            playSound('slimeAttack');
                             currentTarget.hp -= slimeDamage;
                             slime.lastDamageApplicationTimes[currentTarget.id] = currentTime;
                             updateUI();
@@ -1687,8 +1691,6 @@
 
         function resizeCanvas() {
             const containerWidth = gameCanvasContainer.offsetWidth;
-            // The height is determined by padding-top to maintain aspect ratio for the container
-            // So, canvas.height should match container's computed height
             const containerHeight = gameCanvasContainer.offsetHeight;
 
 
