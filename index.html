@@ -39,7 +39,7 @@
         }
         .ui-container::-webkit-scrollbar-thumb {
             background: #7f8c8d;
-            border-radius: 4px;
+            border-radius: 44px;
         }
         .ui-container::-webkit-scrollbar-thumb:hover {
             background: #95a5a6;
@@ -341,7 +341,7 @@
             pointsPerCircle: 32,
             currentPathTargetIndex: 0,
             summonCooldowns: { normal: false, fast: false, tank: false },
-            hpThresholds: { normal: 0.9, fast: 0.8, tank: 0.7 }, 
+            hpThresholds: { normal: 0.9, fast: 0.8, tank: 0.7 },
             finalSpeedMultiplier: 1.5,
             pathState: 'outer_circle',
             finalApproachBaseSpeed: 0.20,
@@ -431,6 +431,7 @@
         const SKILL_CATEGORY_ORDER = ['player', 'bullet', 'slime', 'energy_wave', 'wind_blade'];
 
         let soundEnabled = true;
+
         const soundEffectPaths = {
             shoot: 'sounds/shoot.mp3',
             zombieDie: 'sounds/zombie_die.mp3',
@@ -447,6 +448,7 @@
             skillAcquired: 'sounds/skill_acquired.mp3',
             bossSummon: 'sounds/boss_summon.mp3'
         };
+
         const soundEffectVolumes = {
             shoot: 0.15,
             zombieDie: 0.3,
@@ -463,13 +465,41 @@
             skillAcquired: 0.5,
             bossSummon: 0.35
         };
+
+        const soundEffectPoolSizes = {
+            shoot: 10,
+            zombieDie: 15,
+            playerHurt: 3,
+            levelUp: 1,
+            gameOver: 1,
+            waveStart: 1,
+            bossDie: 1,
+            skillSelect: 1,
+            energyWaveFire: 1,
+            slimeAttack: 5,
+            buttonClick: 3,
+            skillAcquired: 1,
+            bossSummon: 5
+        };
+
         let activeBossSpawnSound = null;
-        let soundPlayers = {};
+        let audioPools = {};
+        let nextAudioIndex = {};
 
         function initializeSoundPlayers() {
             for (const key in soundEffectPaths) {
                 if (key === 'bossSpawn') continue;
-                soundPlayers[key] = new Audio(soundEffectPaths[key]);
+
+                const poolSize = soundEffectPoolSizes[key] || 1;
+                audioPools[key] = [];
+                nextAudioIndex[key] = 0;
+
+                for (let i = 0; i < poolSize; i++) {
+                    const audio = new Audio(soundEffectPaths[key]);
+                    audio.volume = soundEffectVolumes[key] !== undefined ? soundEffectVolumes[key] : 0.3;
+                    audio.preload = 'auto';
+                    audioPools[key].push(audio);
+                }
             }
         }
 
@@ -501,18 +531,48 @@
                 audio.onended = () => {
                     if (activeBossSpawnSound === audio) {
                         activeBossSpawnSound = null;
+                        audio.src = '';
+                        audio.load();
                     }
                 };
 
-            } else if (soundPlayers[soundKey]) {
-                const playerAudio = soundPlayers[soundKey];
-                const clonedAudio = playerAudio.cloneNode(true);
-                clonedAudio.volume = volume;
-                clonedAudio.play().catch(e => {});
             } else {
-                const audio = new Audio(soundEffectPaths[soundKey]);
-                audio.volume = volume;
-                audio.play().catch(e => {});
+                const pool = audioPools[soundKey];
+                if (!pool || pool.length === 0) {
+                    console.warn(`Audio pool for ${soundKey} is empty or not initialized.`);
+                    const tempAudio = new Audio(soundEffectPaths[soundKey]);
+                    tempAudio.volume = volume;
+                    tempAudio.play().catch(e => {});
+                    return;
+                }
+
+                let audioToPlay = null;
+
+                for(let i = 0; i < pool.length; i++) {
+                    const candidateAudio = pool[(nextAudioIndex[soundKey] + i) % pool.length];
+                    if (candidateAudio.paused || candidateAudio.ended) {
+                        audioToPlay = candidateAudio;
+                        nextAudioIndex[soundKey] = (nextAudioIndex[soundKey] + i + 1) % pool.length;
+                        break;
+                    }
+                }
+
+                if (!audioToPlay) {
+                    audioToPlay = pool[nextAudioIndex[soundKey]];
+                    nextAudioIndex[soundKey] = (nextAudioIndex[soundKey] + 1) % pool.length;
+                    
+                    audioToPlay.pause();
+                    audioToPlay.currentTime = 0;
+                }
+
+                audioToPlay.volume = volume;
+                audioToPlay.play().catch(e => {
+                    if (e.name === 'NotAllowedError') {
+                        console.warn("Autoplay was prevented for sound:", soundKey, e);
+                    } else {
+                        console.error("Error playing sound:", soundKey, e);
+                    }
+                });
             }
         }
 
@@ -837,7 +897,7 @@
                     currentBoss.pathSegments = currentBoss.pathSegments || [];
                     currentBoss.currentPathTargetIndex = currentBoss.currentPathTargetIndex || 0;
                     currentBoss.summonCooldowns = currentBoss.summonCooldowns || { normal: false, fast: false, tank: false };
-                    currentBoss.hpThresholds = currentBoss.hpThresholds || BOSS_STATS.hpThresholds; 
+                    currentBoss.hpThresholds = currentBoss.hpThresholds || BOSS_STATS.hpThresholds;
                     currentBoss.finalSpeedMultiplier = currentBoss.finalSpeedMultiplier || BOSS_STATS.finalSpeedMultiplier;
                     currentBoss.pathState = currentBoss.pathState || 'outer_circle';
                     currentBoss.finalApproachBaseSpeed = currentBoss.finalApproachBaseSpeed || BOSS_STATS.finalApproachBaseSpeed * (1.0 + Math.max(0, Math.floor(wave / 10) - 1) * 0.05);
@@ -872,42 +932,84 @@
             let dmgBonus = 0;
             let cumulativeSpeedFactor = 0;
 
-
-            const wavesInTier1 = Math.min(currentWave, 100);
-            const hpDivisor = (wavesInTier1 <= 15) ? 4 : 3;
-            hpBonus += Math.floor(wavesInTier1 / hpDivisor) * (baseStats.hp * 0.12);
-            const dmgDivisor = (wavesInTier1 <= 20) ? 7 : 5;
-            dmgBonus += Math.floor(wavesInTier1 / dmgDivisor) * 1.2;
+            // Tier 1: 波次 1-50 (玩家前期) 增长率适中
+            const wavesInTier1 = Math.min(currentWave, 50);
+            hpBonus += Math.floor(wavesInTier1 / 3) * (baseStats.hp * 0.1);
+            dmgBonus += Math.floor(wavesInTier1 / 5) * 1.0;
             cumulativeSpeedFactor += wavesInTier1 * 0.003;
 
 
-            if (currentWave > 100) {
-                const wavesInTier2 = Math.min(currentWave, 400) - 100;
-                hpBonus += Math.floor(wavesInTier2 / 3) * (baseStats.hp * 0.28);
-                dmgBonus += Math.floor(wavesInTier2 / 5) * 2.4;
-                cumulativeSpeedFactor += wavesInTier2 * 0.0055;
+            // Tier 2: 波次 51-200 (游戏中期) 增长率提升
+            if (currentWave > 50) {
+                const wavesInTier2 = Math.min(currentWave, 200) - 50;
+                // 普通僵尸: 逐渐增加坦度和伤害
+                hpBonus += Math.floor(wavesInTier2 / 2) * (baseStats.hp * 0.2);
+                dmgBonus += Math.floor(wavesInTier2 / 3) * 2.0;
 
-
-                if (currentWave > 400) {
-                    const post400Waves = currentWave - 400;
-                    let post400HpFactor_type, post400DmgFactor_type, post400SpeedFactor_type;
-
-                    if (zombieTypeKey === 'normal') { post400HpFactor_type = 0.20; post400DmgFactor_type = 1.0;  post400SpeedFactor_type = 0.0015; }
-                    else if (zombieTypeKey === 'fast') { post400HpFactor_type = 0.05; post400DmgFactor_type = 0.5; post400SpeedFactor_type = 0.008; }
-                    else if (zombieTypeKey === 'tank') { post400HpFactor_type = 0.40; post400DmgFactor_type = 3.5; post400SpeedFactor_type = 0.004; }
-                    else {
-                        post400HpFactor_type = 0.28; post400DmgFactor_type = 2.4; post400SpeedFactor_type = 0.0055;
-                    }
-
-                    hpBonus += Math.floor(post400Waves / 3) * (baseStats.hp * post400HpFactor_type);
-                    dmgBonus += Math.floor(post400Waves / 5) * post400DmgFactor_type;
-                    cumulativeSpeedFactor += post400Waves * post400SpeedFactor_type;
+                // 快速型僵尸: 速度和伤害开始明显提升
+                if (zombieTypeKey === 'fast') {
+                    cumulativeSpeedFactor += wavesInTier2 * 0.01; // 快速型加速
+                    dmgBonus += Math.floor(wavesInTier2 / 2) * 3.0; // 快速型伤害加速
+                } else if (zombieTypeKey === 'tank') {
+                    // 坦克型僵尸: 生命值显著提升
+                    hpBonus += Math.floor(wavesInTier2 / 1) * (baseStats.hp * 0.5); // 坦克型生命值大幅加速
                 }
+                cumulativeSpeedFactor += wavesInTier2 * 0.005; // 整体速度增长
+            }
+
+            // Tier 3: 波次 201-400 (游戏中后期) 增长率进一步加大
+            if (currentWave > 200) {
+                const wavesInTier3 = Math.min(currentWave, 400) - 200;
+                hpBonus += Math.floor(wavesInTier3 / 1) * (baseStats.hp * 0.35); // 快速增长
+                dmgBonus += Math.floor(wavesInTier3 / 1) * 3.0; // 快速增长
+
+                if (zombieTypeKey === 'fast') {
+                    cumulativeSpeedFactor += wavesInTier3 * 0.015; // 快速型加速
+                    dmgBonus += Math.floor(wavesInTier3 / 1) * 5.0; // 快速型伤害加速
+                } else if (zombieTypeKey === 'tank') {
+                    hpBonus += Math.floor(wavesInTier3 / 1) * (baseStats.hp * 1.0); // 坦克型生命值进一步大幅加速
+                }
+                cumulativeSpeedFactor += wavesInTier3 * 0.008; // 整体速度增长
+            }
+
+
+            // Tier 4: 波次 401+ (游戏后期) 增长率最快，针对性加强
+            if (currentWave > 400) {
+                const post400Waves = currentWave - 400;
+                let post400HpFactor_type, post400DmgFactor_type, post400SpeedFactor_type;
+
+                if (zombieTypeKey === 'normal') {
+                    post400HpFactor_type = 1.0;
+                    post400DmgFactor_type = 5.0;
+                    post400SpeedFactor_type = 0.003;
+                } else if (zombieTypeKey === 'fast') {
+                    // 快速型僵尸：生命增长更快，伤害非常高，速度非常快
+                    post400HpFactor_type = 0.6;
+                    post400DmgFactor_type = 8.0; // 快速型僵尸伤害爆炸增长
+                    post400SpeedFactor_type = 0.03; // 快速型僵尸速度爆炸增长
+                } else if (zombieTypeKey === 'tank') {
+                    // 坦克型僵尸：生命值爆炸增长，伤害也很高
+                    post400HpFactor_type = 4.0; // 坦克型僵尸生命爆炸增长
+                    post400DmgFactor_type = 7.0;
+                    post400SpeedFactor_type = 0.008;
+                } else {
+                    post400HpFactor_type = 1.0;
+                    post400DmgFactor_type = 5.0;
+                    post400SpeedFactor_type = 0.01;
+                }
+
+                hpBonus += Math.floor(post400Waves / 1) * (baseStats.hp * post400HpFactor_type); // 每波都涨生命
+                dmgBonus += Math.floor(post400Waves / 1) * post400DmgFactor_type; // 每波都涨伤害
+                cumulativeSpeedFactor += post400Waves * post400SpeedFactor_type; // 每波都涨速度
             }
 
             hp = baseStats.hp + hpBonus;
             damage = baseStats.damage + dmgBonus;
             speed = baseStats.speed * (1 + cumulativeSpeedFactor);
+            
+            // 确保僵尸的速度不会过快导致难以捕捉或逻辑崩溃
+            const MAX_POSSIBLE_SPEED = 15.0; // 略微放宽最大速度限制，让快速型有更显著效果
+            speed = Math.min(speed, MAX_POSSIBLE_SPEED);
 
             return { hp, damage, speed };
         }
@@ -995,7 +1097,7 @@
                 } else if (wave <= 400) {
                     numZombiesToSpawn = numZombiesBase + 100 * 2 + (wave - 100) * 4;
                 } else {
-                    numZombiesToSpawn = numZombiesBase + 100 * 2 + 300 * 4;
+                    numZombiesToSpawn = numZombiesBase + 100 * 2 + 300 * 4 + (wave - 400) * 10; // 400波后僵尸数量进一步大幅增长
                 }
                 for (let i = 0; i < numZombiesToSpawn; i++) spawnZombie();
             }
@@ -1015,7 +1117,15 @@
                 let typeKey = typeKeyOverride;
                 if (!typeKey) {
                     typeKey = 'normal'; const randType = Math.random();
-                    if (wave > 2 && randType > 0.65) typeKey = 'fast'; if (wave > 4 && randType > 0.85) typeKey = 'tank';
+                     // 随着波次增加，快速型和坦克型的出现概率越来越高
+                    if (wave > 5 && randType > 0.6) typeKey = 'fast'; 
+                    if (wave > 10 && randType > 0.8) typeKey = 'tank';
+                    if (wave > 50 && randType > 0.4) typeKey = 'fast'; 
+                    if (wave > 50 && randType > 0.7) typeKey = 'tank';
+                    if (wave > 200 && randType > 0.2) typeKey = 'fast'; 
+                    if (wave > 200 && randType > 0.5) typeKey = 'tank';
+                    if (wave > 400 && randType > 0.1) typeKey = 'fast'; 
+                    if (wave > 400 && randType > 0.3) typeKey = 'tank';
                 }
                 const type = ZOMBIE_TYPES[typeKey];
                 const stats = getZombieStatsForWave(type, typeKey, wave);
@@ -1065,15 +1175,35 @@
 
         function spawnBoss() {
             playSound('bossSpawn');
-            const bossLevelMultiplier = Math.max(0, Math.floor(wave / 10) - 1);
+            const bossLevelMultiplier = Math.max(1, Math.floor(wave / 10)); 
 
+            // 基础成长率
+            let bossHpMultiplier = 1.0 + bossLevelMultiplier * 0.7; // 更快的生命值增长
+            let bossSpeedMultiplier = 1.0 + bossLevelMultiplier * 0.08; // 更快的速度增长
+            let bossDamageMultiplier = 1.0 + bossLevelMultiplier * 0.15; // 额外增加伤害乘数
 
-            let bossHpMultiplier = 1.0 + bossLevelMultiplier;
-            let bossSpeedMultiplier = 1.0 + bossLevelMultiplier * 0.05;
-            if (wave > 100) {
-                bossHpMultiplier *= 1.4;
-                bossSpeedMultiplier *= 1.15;
+            // 特殊波次加速
+            if (wave > 50) {
+                const wavesAfter50 = wave - 50;
+                bossHpMultiplier += wavesAfter50 * 0.1; // 50波后生命值额外增加
+                bossSpeedMultiplier += wavesAfter50 * 0.005; // 50波后速度额外增加
+                bossDamageMultiplier += wavesAfter50 * 0.01; // 50波后伤害额外增加
             }
+
+            if (wave > 200) {
+                const wavesAfter200 = wave - 200;
+                bossHpMultiplier += wavesAfter200 * 0.2; // 200波后生命值再次加速
+                bossSpeedMultiplier += wavesAfter200 * 0.01; // 200波后速度再次加速
+                bossDamageMultiplier += wavesAfter200 * 0.02; // 200波后伤害再次加速
+            }
+            
+            // 400波后Boss成长显著提升
+            if (wave > 400) {
+                const post400Waves = wave - 400;
+                bossHpMultiplier += post400Waves * 1.5; 
+                bossSpeedMultiplier += post400Waves * 0.025; 
+                bossDamageMultiplier += post400Waves * 0.05; 
+            } 
 
             const baseSpeed = BOSS_STATS.baseSpeed * bossSpeedMultiplier;
 
@@ -1083,7 +1213,7 @@
                 maxHp: BOSS_STATS.baseHp * bossHpMultiplier,
                 color: BOSS_STATS.color,
                 size: BOSS_STATS.size,
-                damage: BOSS_STATS.damage,
+                damage: (BOSS_STATS.damage * bossDamageMultiplier), // 使用新的伤害乘数
                 xp: BOSS_STATS.baseXp * (1 + bossLevelMultiplier * 0.5),
                 speed: baseSpeed,
                 originalSpeed: baseSpeed,
@@ -1102,6 +1232,11 @@
             currentBoss.y = currentBoss.pathSegments[0].y;
 
             bossSummons = [];
+            
+            // 确保Boss伤害至少是玩家最大生命值的一部分，以保证威胁
+            // 或保持其根据僵尸属性的倍数关系，但提高倍数
+            const currentWaveNormalZombieStats = getZombieStatsForWave(ZOMBIE_TYPES.normal, 'normal', wave); 
+            currentBoss.damage = Math.max(currentBoss.damage, currentWaveNormalZombieStats.damage * 15); // 提高倍数到15
         }
 
         function drawPlayer() {
@@ -1746,7 +1881,7 @@
                     if (typeof enemy.originalSpeed === 'number') {
                         enemy.speed = enemy.originalSpeed;
                     }
-                    enemy.slowUntil = 0; 
+                    enemy.slowUntil = 0;
                 }
 
 
@@ -1796,8 +1931,8 @@
             if (skillBookOpen || skillSelectionActive || bossRewardModalActive || !currentBoss || !player || !gameRunning || currentBoss.hp <= 0) return;
             const hpPercent = currentBoss.hp / currentBoss.maxHp;
 
-            triggerBossSummon('normal'); 
-            currentBoss.phaseEntered.normal = true; 
+            triggerBossSummon('normal');
+            currentBoss.phaseEntered.normal = true;
 
             if (hpPercent <= currentBoss.hpThresholds.normal && !currentBoss.phaseEntered.fast) {
                 triggerBossSummon('fast');
@@ -1874,54 +2009,47 @@
             const bossInstanceLevel = Math.max(1, Math.floor(wave / 10));
             let baseSummonCount;
 
-            if (bossInstanceLevel <= 3) { // Tier 1: Up to Wave 30 Boss
+            if (bossInstanceLevel <= 5) { // 调整早期Boss召唤数量
                 if (type === 'normal') {
-                    baseSummonCount = 1 + bossInstanceLevel; // W10:2, W20:3, W30:4
+                    baseSummonCount = 3 + bossInstanceLevel; 
                 } else if (type === 'fast') {
-                    if (bossInstanceLevel === 1) baseSummonCount = 0; 
-                    else baseSummonCount = Math.floor(0.5 * bossInstanceLevel); // W20:1, W30:1
-                } else { // Tank
-                    baseSummonCount = (bossInstanceLevel === 3) ? 1 : 0; // Only W30 boss gets 1 tank
+                    baseSummonCount = Math.floor(0.8 * bossInstanceLevel); // 更早开始召唤快速型
+                } else { 
+                    baseSummonCount = (bossInstanceLevel >= 4) ? 1 : 0; // 40波开始召唤坦克
                 }
-            } else if (bossInstanceLevel <= 9) { // Tier 2: Wave 40 to Wave 90 Boss
-                const midLevelProgress = bossInstanceLevel - 3; // 1 (W40) to 6 (W90)
+            } else if (bossInstanceLevel <= 15) { // 调整中期Boss召唤数量
+                const midLevelProgress = bossInstanceLevel - 5; 
                 if (type === 'normal') {
-                    baseSummonCount = 4 + Math.floor(midLevelProgress * 1.0); // W40:5, W90:10
+                    baseSummonCount = 8 + Math.floor(midLevelProgress * 1.5); 
                 } else if (type === 'fast') {
-                    baseSummonCount = 1 + Math.floor(midLevelProgress * 0.8);   // W40:1, W90:5
-                } else { // Tank
-                    baseSummonCount = 1 + Math.floor(midLevelProgress * 0.5);   // W40:1, W90:4
+                    baseSummonCount = 2 + Math.floor(midLevelProgress * 1.2);   
+                } else { 
+                    baseSummonCount = 1 + Math.floor(midLevelProgress * 0.8);   
                 }
-            } else { // Tier 3: Wave 100+ Boss
-                const lateLevelProgress = bossInstanceLevel - 9; // 1 (W100) to N
+            } else { // 调整后期Boss召唤数量
+                const lateLevelProgress = bossInstanceLevel - 15; 
                 if (type === 'normal') {
-                    baseSummonCount = 10 + Math.floor(lateLevelProgress * 1.5); // W100:11, W200(BIL 20, prog 11): 10 + 16 = 26
+                    baseSummonCount = 20 + Math.floor(lateLevelProgress * 3.0); 
                 } else if (type === 'fast') {
-                    baseSummonCount = 5 + Math.floor(lateLevelProgress * 1.2);    // W100:6, W200: 5 + 13 = 18
-                } else { // Tank
-                    baseSummonCount = 4 + Math.floor(lateLevelProgress * 1.0);    // W100:5, W200: 4 + 11 = 15
+                    baseSummonCount = 10 + Math.floor(lateLevelProgress * 2.5);    
+                } else { 
+                    baseSummonCount = 8 + Math.floor(lateLevelProgress * 2.0);    
                 }
             }
 
             let quantityMultiplier = 1.0;
-            if (bossInstanceLevel <= 1) {
-                quantityMultiplier = 0.8; 
-            } else if (bossInstanceLevel <= 5) { 
-                quantityMultiplier = 1.0 + (bossInstanceLevel - 1) * 0.1; // 1.1 (W20) to 1.4 (W50)
-            } else if (bossInstanceLevel <= 10) {
-                 quantityMultiplier = 1.4 + (bossInstanceLevel - 5) * 0.15; // 1.55 (W60) to 2.15 (W100)
+            if (bossInstanceLevel <= 3) {
+                quantityMultiplier = 1.0; 
+            } else if (bossInstanceLevel <= 10) { 
+                quantityMultiplier = 1.2 + (bossInstanceLevel - 3) * 0.05; 
             } else { 
-                quantityMultiplier = 2.15 + (bossInstanceLevel - 10) * 0.1; // 2.25 (W110), 3.15 (W200)
+                quantityMultiplier = 1.5 + (bossInstanceLevel - 10) * 0.08; 
             }
-            
+
             let finalSummonCount = Math.floor(baseSummonCount * quantityMultiplier);
             finalSummonCount = Math.max(0, finalSummonCount);
 
-            if (type === 'tank' && bossInstanceLevel < 3) finalSummonCount = 0; 
-
-            if (type === 'normal' && baseSummonCount > 0 && finalSummonCount === 0 && bossInstanceLevel > 0) {
-                finalSummonCount = 1;
-            }
+            if (type === 'tank' && bossInstanceLevel < 4) finalSummonCount = 0; 
 
             if (finalSummonCount > 0) {
                 spawnZombie(type, finalSummonCount, true);
@@ -1956,8 +2084,8 @@
                         blade.hitTargets.add(enemy.id);
 
 
-                        if (enemy !== currentBoss) { // Bosses are not slowed by wind blades
-                            if (typeof enemy.originalSpeed === 'number') { // Only apply slow if originalSpeed is known
+                        if (enemy !== currentBoss) {
+                            if (typeof enemy.originalSpeed === 'number') {
                                 enemy.speed = enemy.originalSpeed * (1 - blade.slowPercent);
                                 enemy.slowUntil = currentTime + blade.slowDurationMs;
                             }
@@ -2395,12 +2523,6 @@
                     const isExpanded = !content.classList.contains('collapsed');
                     this.textContent = isExpanded ? '-' : '+';
                     this.setAttribute('aria-expanded', isExpanded);
-
-                    if (isExpanded) {
-                        header.classList.remove('collapsed-state');
-                    } else {
-                        header.classList.add('collapsed-state');
-                    }
 
 
                     if (panelId) {
